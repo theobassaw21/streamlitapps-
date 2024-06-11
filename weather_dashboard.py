@@ -6,7 +6,7 @@ import plotly.express as px
 
 
 st.set_page_config(
-    page_title="Use Pygwalker In Streamlit",
+    page_title="WEATHER ANALYSIS DASHBOARD",
     layout="wide"
 )
 # Function to load data
