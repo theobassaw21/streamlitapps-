@@ -3,12 +3,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
-import pygwalker as pyg
-#from pygwalker.api.streamlit import StreamlitRenderer
-#from sklearn.model_selection import train_test_split
-#from sklearn.linear_model import LogisticRegression
-#from sklearn.metrics import accuracy_score
-
 
 
 st.set_page_config(
