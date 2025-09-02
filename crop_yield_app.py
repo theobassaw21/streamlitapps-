@@ -525,7 +525,11 @@ def main() -> None:
                     method_note = "MobileNetV2 + Demo classifier (synthetic)"
             st.markdown(
                 f"""
-                <div class=\"result-box\">\n                    <div class=\"metric-title\">Prediction</div>\n                    <div class=\"metric-value\">{pred_class} ({pred_conf*100:.0f}%)</div>\n                    <div class=\"subtle\">{method_note}</div>\n                </div>
+                <div class=\"result-box\">
+                    <div class=\"metric-title\">Detected pest/disease</div>
+                    <div class=\"metric-value\">{pred_class}</div>
+                    <div class=\"subtle\">Confidence: {pred_conf*100:.0f}%</div>
+                </div>
                 """,
                 unsafe_allow_html=True,
             )
