@@ -489,13 +489,42 @@ def main() -> None:
             if not os.path.exists(label_path):
                 return None
             with open(label_path, "r", encoding="utf-8") as f:
-                labels = [line.strip() for line in f if line.strip()]
+                raw = [line.strip() for line in f if line.strip()]
+            labels = []
+            for s in raw:
+                if ":" in s:
+                    s = s.split(":", 1)[1]
+                s = s.replace("_", " ").strip()
+                labels.append(s)
             return labels
 
         backbone, preprocess, device = load_backbone()
         demo_clf = train_demo_classifier()
         onnx_model = load_onnx_model("/workspace/models/plant_disease.onnx")
         onnx_labels = load_labels("/workspace/models/labels.txt")
+
+        # Optional: allow uploading labels.txt to map class indices to names
+        label_file = st.file_uploader("Optional: labels.txt", type=["txt"], accept_multiple_files=False, key="labels_uploader")
+        if label_file is not None:
+            txt = label_file.read().decode("utf-8", errors="ignore")
+            raw = [line.strip() for line in txt.splitlines() if line.strip()]
+            labels = []
+            for s in raw:
+                if ":" in s:
+                    s = s.split(":", 1)[1]
+                s = s.replace("_", " ").strip()
+                labels.append(s)
+            st.session_state["onnx_labels_override"] = labels
+        if "onnx_labels_override" in st.session_state:
+            onnx_labels = st.session_state["onnx_labels_override"]
+
+        # Status caption about model/labels presence
+        if onnx_model is not None:
+            if onnx_labels is None or len(onnx_labels) == 0:
+                st.warning("ONNX model loaded but no labels found. Upload labels.txt to see disease names.")
+                st.caption("Model: PlantVillage ONNX — Labels: none loaded")
+            else:
+                st.caption(f"Model: PlantVillage ONNX — Labels: {len(onnx_labels)} loaded")
 
         uploaded = st.file_uploader("Upload image", type=["png", "jpg", "jpeg"], accept_multiple_files=False)
         if uploaded is not None:
