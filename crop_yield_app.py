@@ -18,6 +18,22 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
+import os
+try:
+    import onnxruntime as ort
+except Exception:
+    ort = None
+import os
+try:
+    import onnxruntime as ort
+except Exception:
+    ort = None
+import os
+try:
+    import onnxruntime as ort
+except Exception:
+    ort = None
+
 
 # -----------------------------
 # Page Configuration & Styling
@@ -418,6 +434,13 @@ def main() -> None:
         st.subheader("Pest & Disease Image Classification")
         st.caption("Upload a plant/leaf image — prediction runs automatically.")
 
+        # Lazy imports for ONNX
+        import os
+        try:
+            import onnxruntime as ort
+        except Exception:
+            ort = None
+
         @st.cache_resource(show_spinner=False)
         def load_backbone():
             device = torch.device("cpu")
@@ -435,11 +458,10 @@ def main() -> None:
 
         @st.cache_resource(show_spinner=False)
         def train_demo_classifier():
-            # Create a tiny synthetic set of embeddings with 4 classes to simulate a trained head
             rng = np.random.default_rng(0)
             classes = np.array(["Healthy", "Leaf miner", "Rust", "Blight"])
             num_per = 48
-            d = 1280  # MobileNetV2 embedding size
+            d = 1280
             means = rng.normal(0, 1, size=(len(classes), d))
             X = []
             y = []
@@ -453,29 +475,57 @@ def main() -> None:
             clf.fit(X, y)
             return clf
 
+        @st.cache_resource(show_spinner=False)
+        def load_onnx_model(model_path: str):
+            if ort is None:
+                return None
+            if not os.path.exists(model_path):
+                return None
+            providers = ["CPUExecutionProvider"]
+            return ort.InferenceSession(model_path, providers=providers)
+
+        @st.cache_data(show_spinner=False)
+        def load_labels(label_path: str):
+            if not os.path.exists(label_path):
+                return None
+            with open(label_path, "r", encoding="utf-8") as f:
+                labels = [line.strip() for line in f if line.strip()]
+            return labels
+
         backbone, preprocess, device = load_backbone()
         demo_clf = train_demo_classifier()
+        onnx_model = load_onnx_model("/workspace/models/plant_disease.onnx")
+        onnx_labels = load_labels("/workspace/models/labels.txt")
 
         uploaded = st.file_uploader("Upload image", type=["png", "jpg", "jpeg"], accept_multiple_files=False)
         if uploaded is not None:
             img = Image.open(uploaded).convert("RGB")
             st.image(img, caption="Uploaded image", use_container_width=True)
             with st.spinner("Analyzing image..."):
-                tensor = preprocess(img).unsqueeze(0).to(device)
-                with torch.no_grad():
-                    emb = backbone(tensor).cpu().numpy()
-                probs = demo_clf.predict_proba(emb)[0]
-                classes = list(demo_clf.classes_)
-                top_idx = int(np.argmax(probs))
-                pred_class = classes[top_idx]
-                pred_conf = float(probs[top_idx])
+                if onnx_model is not None and onnx_labels is not None:
+                    tensor = preprocess(img).unsqueeze(0).cpu().numpy().astype(np.float32)
+                    input_name = onnx_model.get_inputs()[0].name
+                    outputs = onnx_model.run(None, {input_name: tensor})
+                    logits = outputs[0][0]
+                    exps = np.exp(logits - np.max(logits))
+                    probs = exps / exps.sum()
+                    top_idx = int(np.argmax(probs))
+                    pred_class = onnx_labels[top_idx] if top_idx < len(onnx_labels) else f"Class {top_idx}"
+                    pred_conf = float(probs[top_idx])
+                    method_note = "PlantVillage ONNX"
+                else:
+                    tensor = preprocess(img).unsqueeze(0).to(device)
+                    with torch.no_grad():
+                        emb = backbone(tensor).cpu().numpy()
+                    probs_arr = demo_clf.predict_proba(emb)[0]
+                    classes = list(demo_clf.classes_)
+                    top_idx = int(np.argmax(probs_arr))
+                    pred_class = classes[top_idx]
+                    pred_conf = float(probs_arr[top_idx])
+                    method_note = "MobileNetV2 + Demo classifier (synthetic)"
             st.markdown(
                 f"""
-                <div class=\"result-box\">
-                    <div class=\"metric-title\">Prediction</div>
-                    <div class=\"metric-value\">{pred_class} ({pred_conf*100:.0f}%)</div>
-                    <div class=\"subtle\">MobileNetV2 + Demo classifier (synthetic)</div>
-                </div>
+                <div class=\"result-box\">\n                    <div class=\"metric-title\">Prediction</div>\n                    <div class=\"metric-value\">{pred_class} ({pred_conf*100:.0f}%)</div>\n                    <div class=\"subtle\">{method_note}</div>\n                </div>
                 """,
                 unsafe_allow_html=True,
             )
