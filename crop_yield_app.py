@@ -8,6 +8,9 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from PIL import Image, ImageOps, ImageDraw
+import torch
+from torchvision import transforms, models
+from sklearn.linear_model import LogisticRegression
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.metrics import mean_squared_error, accuracy_score
@@ -413,33 +416,98 @@ def main() -> None:
 
     with tabs[1]:
         st.subheader("Pest & Disease Image Classification")
-        st.caption("Upload a leaf/plant image; the demo uses a synthetic classifier.")
-        uploaded = st.file_uploader("Upload image", type=["png", "jpg", "jpeg"], accept_multiple_files=False)
-        demo_classes = ["Healthy", "Leaf miner", "Rust", "Blight"]
-        if uploaded is not None:
-            image = Image.open(uploaded).convert("RGB")
-            st.image(image, caption="Uploaded image", use_container_width=True)
-            # Synthetic feature extraction: simple color statistics
-            img_small = ImageOps.fit(image, (128, 128))
-            np_img = np.asarray(img_small) / 255.0
-            mean_rgb = np_img.reshape(-1, 3).mean(axis=0)
-            std_rgb = np_img.reshape(-1, 3).std(axis=0)
-            # Fake classifier: map color stats deterministically to a class for demo
-            score = float(mean_rgb[1] - mean_rgb[0] + 0.5 * std_rgb[2])
-            idx = int(abs(hash(f"{score:.4f}")) % len(demo_classes))
-            pred_class = demo_classes[idx]
-            st.markdown(
-                f"""
-                <div class=\"result-box\">
-                    <div class=\"metric-title\">Prediction</div>
-                    <div class=\"metric-value\">{pred_class}</div>
-                    <div class=\"subtle\">🪲 Synthetic demo classifier</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        else:
-            st.info("Upload a plant/leaf photo to classify.")
+        st.caption("Upload labeled examples, train a lightweight classifier on MobileNetV2 features, then predict.")
+
+        # Cache the backbone once
+        @st.cache_resource(show_spinner=False)
+        def load_backbone():
+            device = torch.device("cpu")
+            backbone = models.mobilenet_v2(weights=models.MobileNet_V2_Weights.DEFAULT)
+            backbone.classifier = torch.nn.Identity()
+            backbone.eval()
+            backbone.to(device)
+            preprocess = transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ])
+            return backbone, preprocess, device
+
+        backbone, preprocess, device = load_backbone()
+
+        # Session-state storage for few-shot dataset and classifier
+        if "img_labels" not in st.session_state:
+            st.session_state.img_labels = []  # list[str]
+        if "img_embeddings" not in st.session_state:
+            st.session_state.img_embeddings = []  # list[np.ndarray]
+        if "img_clf" not in st.session_state:
+            st.session_state.img_clf = None  # LogisticRegression
+        if "img_classes" not in st.session_state:
+            st.session_state.img_classes = ["Healthy", "Leaf miner", "Rust", "Blight"]
+
+        # Upload and label
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            uploaded = st.file_uploader("Upload image(s)", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
+        with c2:
+            label = st.selectbox("Label", st.session_state.img_classes, index=0)
+            add_btn = st.button("Add to dataset")
+
+        # Add images to dataset
+        if add_btn and uploaded:
+            with st.spinner("Extracting features..."):
+                for file in uploaded:
+                    img = Image.open(file).convert("RGB")
+                    st.image(img, caption=f"Added: {file.name} → {label}", use_container_width=True)
+                    tensor = preprocess(img).unsqueeze(0).to(device)
+                    with torch.no_grad():
+                        emb = backbone(tensor).cpu().numpy().squeeze()
+                    st.session_state.img_embeddings.append(emb)
+                    st.session_state.img_labels.append(label)
+
+        # Train classifier
+        train_col, pred_col = st.columns([1, 1])
+        with train_col:
+            st.write("Training examples:", len(st.session_state.img_labels))
+            train_btn = st.button("Train classifier")
+            if train_btn:
+                if len(st.session_state.img_labels) < 4 or len(set(st.session_state.img_labels)) < 2:
+                    st.warning("Add at least 2 classes and 2 images per class.")
+                else:
+                    X = np.stack(st.session_state.img_embeddings)
+                    y = np.array(st.session_state.img_labels)
+                    clf = LogisticRegression(max_iter=200, n_jobs=None)
+                    clf.fit(X, y)
+                    st.session_state.img_clf = clf
+                    st.success("Classifier trained.")
+
+        # Predict
+        with pred_col:
+            test_img_file = st.file_uploader("Upload an image to classify", type=["png", "jpg", "jpeg"], key="predict_uploader")
+            if st.session_state.img_clf is None:
+                st.info("Train the classifier above to enable prediction.")
+            elif test_img_file is not None:
+                img = Image.open(test_img_file).convert("RGB")
+                st.image(img, caption="Image to classify", use_container_width=True)
+                tensor = preprocess(img).unsqueeze(0).to(device)
+                with torch.no_grad():
+                    emb = backbone(tensor).cpu().numpy()
+                probs = st.session_state.img_clf.predict_proba(emb)[0]
+                classes = list(st.session_state.img_clf.classes_)
+                top_idx = int(np.argmax(probs))
+                pred_class = classes[top_idx]
+                pred_conf = float(probs[top_idx])
+                st.markdown(
+                    f"""
+                    <div class=\"result-box\">
+                        <div class=\"metric-title\">Prediction</div>
+                        <div class=\"metric-value\">{pred_class} ({pred_conf*100:.0f}%)</div>
+                        <div class=\"subtle\">MobileNetV2 embeddings + Logistic Regression</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
     with st.expander("Preview training data"):
         st.dataframe(data.head(200), use_container_width=True, hide_index=True)
