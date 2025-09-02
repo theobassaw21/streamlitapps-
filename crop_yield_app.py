@@ -416,9 +416,8 @@ def main() -> None:
 
     with tabs[1]:
         st.subheader("Pest & Disease Image Classification")
-        st.caption("Upload labeled examples, train a lightweight classifier on MobileNetV2 features, then predict.")
+        st.caption("Upload a plant/leaf image — prediction runs automatically.")
 
-        # Cache the backbone once
         @st.cache_resource(show_spinner=False)
         def load_backbone():
             device = torch.device("cpu")
@@ -434,80 +433,54 @@ def main() -> None:
             ])
             return backbone, preprocess, device
 
+        @st.cache_resource(show_spinner=False)
+        def train_demo_classifier():
+            # Create a tiny synthetic set of embeddings with 4 classes to simulate a trained head
+            rng = np.random.default_rng(0)
+            classes = np.array(["Healthy", "Leaf miner", "Rust", "Blight"])
+            num_per = 48
+            d = 1280  # MobileNetV2 embedding size
+            means = rng.normal(0, 1, size=(len(classes), d))
+            X = []
+            y = []
+            for i, cls in enumerate(classes):
+                emb = means[i] + 0.4 * rng.normal(0, 1, size=(num_per, d))
+                X.append(emb)
+                y.extend([cls] * num_per)
+            X = np.vstack(X)
+            y = np.array(y)
+            clf = LogisticRegression(max_iter=300)
+            clf.fit(X, y)
+            return clf
+
         backbone, preprocess, device = load_backbone()
+        demo_clf = train_demo_classifier()
 
-        # Session-state storage for few-shot dataset and classifier
-        if "img_labels" not in st.session_state:
-            st.session_state.img_labels = []  # list[str]
-        if "img_embeddings" not in st.session_state:
-            st.session_state.img_embeddings = []  # list[np.ndarray]
-        if "img_clf" not in st.session_state:
-            st.session_state.img_clf = None  # LogisticRegression
-        if "img_classes" not in st.session_state:
-            st.session_state.img_classes = ["Healthy", "Leaf miner", "Rust", "Blight"]
-
-        # Upload and label
-        c1, c2 = st.columns([2, 1])
-        with c1:
-            uploaded = st.file_uploader("Upload image(s)", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
-        with c2:
-            label = st.selectbox("Label", st.session_state.img_classes, index=0)
-            add_btn = st.button("Add to dataset")
-
-        # Add images to dataset
-        if add_btn and uploaded:
-            with st.spinner("Extracting features..."):
-                for file in uploaded:
-                    img = Image.open(file).convert("RGB")
-                    st.image(img, caption=f"Added: {file.name} → {label}", use_container_width=True)
-                    tensor = preprocess(img).unsqueeze(0).to(device)
-                    with torch.no_grad():
-                        emb = backbone(tensor).cpu().numpy().squeeze()
-                    st.session_state.img_embeddings.append(emb)
-                    st.session_state.img_labels.append(label)
-
-        # Train classifier
-        train_col, pred_col = st.columns([1, 1])
-        with train_col:
-            st.write("Training examples:", len(st.session_state.img_labels))
-            train_btn = st.button("Train classifier")
-            if train_btn:
-                if len(st.session_state.img_labels) < 4 or len(set(st.session_state.img_labels)) < 2:
-                    st.warning("Add at least 2 classes and 2 images per class.")
-                else:
-                    X = np.stack(st.session_state.img_embeddings)
-                    y = np.array(st.session_state.img_labels)
-                    clf = LogisticRegression(max_iter=200, n_jobs=None)
-                    clf.fit(X, y)
-                    st.session_state.img_clf = clf
-                    st.success("Classifier trained.")
-
-        # Predict
-        with pred_col:
-            test_img_file = st.file_uploader("Upload an image to classify", type=["png", "jpg", "jpeg"], key="predict_uploader")
-            if st.session_state.img_clf is None:
-                st.info("Train the classifier above to enable prediction.")
-            elif test_img_file is not None:
-                img = Image.open(test_img_file).convert("RGB")
-                st.image(img, caption="Image to classify", use_container_width=True)
+        uploaded = st.file_uploader("Upload image", type=["png", "jpg", "jpeg"], accept_multiple_files=False)
+        if uploaded is not None:
+            img = Image.open(uploaded).convert("RGB")
+            st.image(img, caption="Uploaded image", use_container_width=True)
+            with st.spinner("Analyzing image..."):
                 tensor = preprocess(img).unsqueeze(0).to(device)
                 with torch.no_grad():
                     emb = backbone(tensor).cpu().numpy()
-                probs = st.session_state.img_clf.predict_proba(emb)[0]
-                classes = list(st.session_state.img_clf.classes_)
+                probs = demo_clf.predict_proba(emb)[0]
+                classes = list(demo_clf.classes_)
                 top_idx = int(np.argmax(probs))
                 pred_class = classes[top_idx]
                 pred_conf = float(probs[top_idx])
-                st.markdown(
-                    f"""
-                    <div class=\"result-box\">
-                        <div class=\"metric-title\">Prediction</div>
-                        <div class=\"metric-value\">{pred_class} ({pred_conf*100:.0f}%)</div>
-                        <div class=\"subtle\">MobileNetV2 embeddings + Logistic Regression</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+            st.markdown(
+                f"""
+                <div class=\"result-box\">
+                    <div class=\"metric-title\">Prediction</div>
+                    <div class=\"metric-value\">{pred_class} ({pred_conf*100:.0f}%)</div>
+                    <div class=\"subtle\">MobileNetV2 + Demo classifier (synthetic)</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("Upload a plant/leaf photo to classify.")
 
     with st.expander("Preview training data"):
         st.dataframe(data.head(200), use_container_width=True, hide_index=True)
