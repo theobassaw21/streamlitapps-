@@ -7,9 +7,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import streamlit as st
+from PIL import Image, ImageOps, ImageDraw
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.metrics import mean_squared_error, roc_auc_score
+from sklearn.metrics import mean_squared_error, accuracy_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
@@ -282,38 +283,8 @@ def render_sidebar(rmse_value: float) -> None:
         )
 
 
-@st.cache_resource(show_spinner=False)
-def train_pest_model(data: pd.DataFrame, random_state: int = 42) -> Tuple[Pipeline, float]:
-    X = data[["region", "crop", "rainfall", "temperature", "soil_quality"]]
-    y = data["pest_disease"].astype(int)
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=random_state
-    )
-
-    categorical_features = ["region", "crop"]
-    numeric_features = ["rainfall", "temperature", "soil_quality"]
-
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), categorical_features),
-            ("num", "passthrough", numeric_features),
-        ]
-    )
-
-    clf = RandomForestClassifier(
-        n_estimators=300,
-        random_state=random_state,
-        n_jobs=-1,
-        class_weight="balanced_subsample",
-    )
-
-    pipeline = Pipeline(steps=[("pre", preprocessor), ("rf", clf)])
-    pipeline.fit(X_train, y_train)
-
-    proba = pipeline.predict_proba(X_test)[:, 1]
-    auc = float(roc_auc_score(y_test, proba))
-    return pipeline, auc
+def _remove_unused():
+    return None
 
 
 def render_inputs() -> Tuple[str, str, float, float, int]:
@@ -409,56 +380,8 @@ def render_scatter(data: pd.DataFrame, user_point: Tuple[float, float]) -> None:
     st.pyplot(fig, use_container_width=True)
 
 
-def predict_pest_risk(model: Pipeline, inputs: Tuple[str, str, float, float, int]) -> Tuple[float, int]:
-    region, crop, rainfall, temperature, soil_quality = inputs
-    df = pd.DataFrame(
-        {
-            "region": [region],
-            "crop": [crop],
-            "rainfall": [rainfall],
-            "temperature": [temperature],
-            "soil_quality": [soil_quality],
-        }
-    )
-    proba = float(model.predict_proba(df)[0][1])
-    label = 1 if proba >= 0.5 else 0
-    return proba, label
-
-
-def render_pest_result(region: str, crop: str, risk_prob: float, label: int) -> None:
-    risk_pct = risk_prob * 100.0
-    severity = "High" if risk_prob >= 0.7 else ("Moderate" if risk_prob >= 0.4 else "Low")
-    st.markdown(
-        f"""
-        <div class=\"result-box\">
-            <div class=\"metric-title\">Pest & Disease Risk</div>
-            <div class=\"metric-value\">{risk_pct:.0f}% ({severity})</div>
-            <div class=\"subtle\">🪲 Estimated risk for <b>{crop}</b> in <b>{region}</b></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.progress(int(min(100, max(0, round(risk_pct)))))
-    with st.expander("Recommended actions"):
-        if risk_prob >= 0.6:
-            st.write(
-                "- Use resistant varieties\n"
-                "- Implement IPM: scouting, pheromone traps, biological controls\n"
-                "- Improve drainage and field sanitation\n"
-                "- Rotate crops and remove infected residue\n"
-                "- Targeted, label-compliant pesticide application if needed"
-            )
-        elif risk_prob >= 0.4:
-            st.write(
-                "- Increase field monitoring frequency\n"
-                "- Maintain balanced fertilization and irrigation\n"
-                "- Spot-treat hotspots; prune and dispose safely"
-            )
-        else:
-            st.write(
-                "- Maintain routine scouting and hygiene\n"
-                "- Keep records and monitor weather-driven risk triggers"
-            )
+def _placeholder_removed():
+    return None
 
 
 def main() -> None:
@@ -469,11 +392,10 @@ def main() -> None:
 
     with st.spinner("Training models..."):
         model, rmse, X_train, X_test = train_model(data)
-        pest_model, pest_auc = train_pest_model(data)
 
     render_sidebar(rmse)
 
-    tabs = st.tabs(["Yield Prediction", "Pest & Disease"])
+    tabs = st.tabs(["Yield Prediction", "Pest & Disease (Images)"])
 
     with tabs[0]:
         region, crop, rainfall, temperature, soil_quality = render_inputs()
@@ -490,19 +412,34 @@ def main() -> None:
             st.info("Set parameters and click Predict to see the result and chart.")
 
     with tabs[1]:
-        st.subheader("Pest & Disease Risk")
-        st.caption(f"Classifier ROC-AUC: {pest_auc:.2f}")
-        pregion, pcrop, prain, ptemp, psoil = render_inputs()
-        pcol1, pcol2 = st.columns([1, 6])
-        with pcol1:
-            risk_clicked = st.button("Estimate risk", type="primary")
-        if risk_clicked:
-            prob, label = predict_pest_risk(
-                pest_model, (pregion, pcrop, prain, ptemp, psoil)
+        st.subheader("Pest & Disease Image Classification")
+        st.caption("Upload a leaf/plant image; the demo uses a synthetic classifier.")
+        uploaded = st.file_uploader("Upload image", type=["png", "jpg", "jpeg"], accept_multiple_files=False)
+        demo_classes = ["Healthy", "Leaf miner", "Rust", "Blight"]
+        if uploaded is not None:
+            image = Image.open(uploaded).convert("RGB")
+            st.image(image, caption="Uploaded image", use_container_width=True)
+            # Synthetic feature extraction: simple color statistics
+            img_small = ImageOps.fit(image, (128, 128))
+            np_img = np.asarray(img_small) / 255.0
+            mean_rgb = np_img.reshape(-1, 3).mean(axis=0)
+            std_rgb = np_img.reshape(-1, 3).std(axis=0)
+            # Fake classifier: map color stats deterministically to a class for demo
+            score = float(mean_rgb[1] - mean_rgb[0] + 0.5 * std_rgb[2])
+            idx = int(abs(hash(f"{score:.4f}")) % len(demo_classes))
+            pred_class = demo_classes[idx]
+            st.markdown(
+                f"""
+                <div class=\"result-box\">
+                    <div class=\"metric-title\">Prediction</div>
+                    <div class=\"metric-value\">{pred_class}</div>
+                    <div class=\"subtle\">🪲 Synthetic demo classifier</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
-            render_pest_result(pregion, pcrop, prob, label)
         else:
-            st.info("Set conditions and click Estimate risk.")
+            st.info("Upload a plant/leaf photo to classify.")
 
     with st.expander("Preview training data"):
         st.dataframe(data.head(200), use_container_width=True, hide_index=True)
