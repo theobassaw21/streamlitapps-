@@ -8,8 +8,8 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.metrics import mean_squared_error, roc_auc_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
@@ -149,6 +149,7 @@ def generate_mock_dataset(specs: DataSpecs) -> pd.DataFrame:
     temperature_values = []
     soil_values = []
     yields = []
+    pest_labels = []
 
     for region, crop in zip(region_choices, crop_choices):
         rain_mu = region_to_rain_mu.get(region, 1100)
@@ -172,10 +173,33 @@ def generate_mock_dataset(specs: DataSpecs) -> pd.DataFrame:
         y = base + reg_adj + rain_effect + temp_effect + soil_effect + noise
         y = max(0.3, float(y))
 
+        # Pest & disease risk generation (synthetic)
+        # Humid regions and higher-than-optimal temps tend to increase risk; better soils reduce it.
+        rain_scaled = (rainfall - 1100.0) / 300.0
+        temp_scaled = (temperature - 28.0) / 3.0
+        soil_scaled = (soil_quality - 5.0) / 2.0
+        region_bias = {
+            "Western": 0.30,
+            "Central": 0.25,
+            "Ashanti": 0.20,
+            "Eastern": 0.15,
+            "Volta": 0.15,
+            "Greater Accra": 0.10,
+            "Bono": 0.10,
+            "Northern": 0.05,
+            "Upper East": 0.00,
+            "Upper West": 0.00,
+        }.get(region, 0.05)
+        crop_bias = {"Cocoa": 0.15, "Yam": 0.10, "Maize": 0.05}.get(crop, 0.05)
+        risk_score = -0.5 + 0.9 * rain_scaled + 0.6 * max(temp_scaled, 0.0) - 0.4 * soil_scaled + region_bias + crop_bias + float(np.random.normal(0, 0.35))
+        risk_prob = 1.0 / (1.0 + math.exp(-risk_score))
+        pest_label = 1 if risk_prob > 0.5 else 0
+
         rainfall_values.append(rainfall)
         temperature_values.append(temperature)
         soil_values.append(soil_quality)
         yields.append(y)
+        pest_labels.append(pest_label)
 
     data = pd.DataFrame(
         {
@@ -185,6 +209,7 @@ def generate_mock_dataset(specs: DataSpecs) -> pd.DataFrame:
             "temperature": temperature_values,
             "soil_quality": soil_values,
             "yield": yields,
+            "pest_disease": pest_labels,
         }
     )
     return data
@@ -255,6 +280,40 @@ def render_sidebar(rmse_value: float) -> None:
         st.caption(
             "You can later plug in real historical datasets to improve accuracy."
         )
+
+
+@st.cache_resource(show_spinner=False)
+def train_pest_model(data: pd.DataFrame, random_state: int = 42) -> Tuple[Pipeline, float]:
+    X = data[["region", "crop", "rainfall", "temperature", "soil_quality"]]
+    y = data["pest_disease"].astype(int)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=random_state
+    )
+
+    categorical_features = ["region", "crop"]
+    numeric_features = ["rainfall", "temperature", "soil_quality"]
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), categorical_features),
+            ("num", "passthrough", numeric_features),
+        ]
+    )
+
+    clf = RandomForestClassifier(
+        n_estimators=300,
+        random_state=random_state,
+        n_jobs=-1,
+        class_weight="balanced_subsample",
+    )
+
+    pipeline = Pipeline(steps=[("pre", preprocessor), ("rf", clf)])
+    pipeline.fit(X_train, y_train)
+
+    proba = pipeline.predict_proba(X_test)[:, 1]
+    auc = float(roc_auc_score(y_test, proba))
+    return pipeline, auc
 
 
 def render_inputs() -> Tuple[str, str, float, float, int]:
@@ -350,30 +409,100 @@ def render_scatter(data: pd.DataFrame, user_point: Tuple[float, float]) -> None:
     st.pyplot(fig, use_container_width=True)
 
 
+def predict_pest_risk(model: Pipeline, inputs: Tuple[str, str, float, float, int]) -> Tuple[float, int]:
+    region, crop, rainfall, temperature, soil_quality = inputs
+    df = pd.DataFrame(
+        {
+            "region": [region],
+            "crop": [crop],
+            "rainfall": [rainfall],
+            "temperature": [temperature],
+            "soil_quality": [soil_quality],
+        }
+    )
+    proba = float(model.predict_proba(df)[0][1])
+    label = 1 if proba >= 0.5 else 0
+    return proba, label
+
+
+def render_pest_result(region: str, crop: str, risk_prob: float, label: int) -> None:
+    risk_pct = risk_prob * 100.0
+    severity = "High" if risk_prob >= 0.7 else ("Moderate" if risk_prob >= 0.4 else "Low")
+    st.markdown(
+        f"""
+        <div class=\"result-box\">
+            <div class=\"metric-title\">Pest & Disease Risk</div>
+            <div class=\"metric-value\">{risk_pct:.0f}% ({severity})</div>
+            <div class=\"subtle\">🪲 Estimated risk for <b>{crop}</b> in <b>{region}</b></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.progress(int(min(100, max(0, round(risk_pct)))))
+    with st.expander("Recommended actions"):
+        if risk_prob >= 0.6:
+            st.write(
+                "- Use resistant varieties\n"
+                "- Implement IPM: scouting, pheromone traps, biological controls\n"
+                "- Improve drainage and field sanitation\n"
+                "- Rotate crops and remove infected residue\n"
+                "- Targeted, label-compliant pesticide application if needed"
+            )
+        elif risk_prob >= 0.4:
+            st.write(
+                "- Increase field monitoring frequency\n"
+                "- Maintain balanced fertilization and irrigation\n"
+                "- Spot-treat hotspots; prune and dispose safely"
+            )
+        else:
+            st.write(
+                "- Maintain routine scouting and hygiene\n"
+                "- Keep records and monitor weather-driven risk triggers"
+            )
+
+
 def main() -> None:
     render_header()
 
     specs = DataSpecs(num_rows=900, random_seed=42)
     data = generate_mock_dataset(specs)
 
-    with st.spinner("Training model..."):
+    with st.spinner("Training models..."):
         model, rmse, X_train, X_test = train_model(data)
+        pest_model, pest_auc = train_pest_model(data)
 
     render_sidebar(rmse)
 
-    # Inputs and predict action
-    region, crop, rainfall, temperature, soil_quality = render_inputs()
-    action_col1, action_col2 = st.columns([1, 6])
-    with action_col1:
-        predict_clicked = st.button("Predict yield", type="primary")
-    if predict_clicked:
-        predicted = predict_yield(
-            model, (region, crop, rainfall, temperature, soil_quality)
-        )
-        render_prediction(region, crop, predicted)
-        render_scatter(data, user_point=(rainfall, predicted))
-    else:
-        st.info("Set parameters and click Predict to see the result and chart.")
+    tabs = st.tabs(["Yield Prediction", "Pest & Disease"])
+
+    with tabs[0]:
+        region, crop, rainfall, temperature, soil_quality = render_inputs()
+        action_col1, action_col2 = st.columns([1, 6])
+        with action_col1:
+            predict_clicked = st.button("Predict yield", type="primary")
+        if predict_clicked:
+            predicted = predict_yield(
+                model, (region, crop, rainfall, temperature, soil_quality)
+            )
+            render_prediction(region, crop, predicted)
+            render_scatter(data, user_point=(rainfall, predicted))
+        else:
+            st.info("Set parameters and click Predict to see the result and chart.")
+
+    with tabs[1]:
+        st.subheader("Pest & Disease Risk")
+        st.caption(f"Classifier ROC-AUC: {pest_auc:.2f}")
+        pregion, pcrop, prain, ptemp, psoil = render_inputs()
+        pcol1, pcol2 = st.columns([1, 6])
+        with pcol1:
+            risk_clicked = st.button("Estimate risk", type="primary")
+        if risk_clicked:
+            prob, label = predict_pest_risk(
+                pest_model, (pregion, pcrop, prain, ptemp, psoil)
+            )
+            render_pest_result(pregion, pcrop, prob, label)
+        else:
+            st.info("Set conditions and click Estimate risk.")
 
     with st.expander("Preview training data"):
         st.dataframe(data.head(200), use_container_width=True, hide_index=True)
