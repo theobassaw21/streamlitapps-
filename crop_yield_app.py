@@ -403,6 +403,170 @@ def _placeholder_removed():
     return None
 
 
+# -----------------------------
+# Supply Chain Optimization
+# -----------------------------
+def default_supply_chain() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    suppliers = pd.DataFrame(
+        {
+            "supplier": ["Tamale Hub", "Kumasi Hub", "Takoradi Hub"],
+            "capacity_tons": [800.0, 600.0, 500.0],
+        }
+    )
+    markets = pd.DataFrame(
+        {
+            "market": ["Accra", "Bolgatanga", "Ho", "Cape Coast"],
+            "demand_tons": [500.0, 400.0, 300.0, 200.0],
+        }
+    )
+    costs = pd.DataFrame(
+        {
+            "Accra": [55.0, 40.0, 30.0],
+            "Bolgatanga": [35.0, 50.0, 70.0],
+            "Ho": [60.0, 45.0, 35.0],
+            "Cape Coast": [65.0, 38.0, 28.0],
+        },
+        index=["Tamale Hub", "Kumasi Hub", "Takoradi Hub"],
+    )
+    return suppliers, markets, costs
+
+
+def optimize_greedy(
+    suppliers: pd.DataFrame, markets: pd.DataFrame, costs: pd.DataFrame
+) -> Tuple[pd.DataFrame, float]:
+    suppliers = suppliers.copy()
+    markets = markets.copy()
+    costs = costs.copy()
+
+    if "supplier" not in suppliers.columns or "capacity_tons" not in suppliers.columns:
+        raise ValueError("Suppliers must have columns: supplier, capacity_tons")
+    if "market" not in markets.columns or "demand_tons" not in markets.columns:
+        raise ValueError("Markets must have columns: market, demand_tons")
+
+    # Ensure cost matrix indices/columns match names
+    costs.index = costs.index.astype(str)
+    costs.columns = [str(c) for c in costs.columns]
+    supplier_names = [str(s) for s in suppliers["supplier"].tolist()]
+    market_names = [str(m) for m in markets["market"].tolist()]
+
+    missing_rows = [s for s in supplier_names if s not in costs.index]
+    missing_cols = [m for m in market_names if m not in costs.columns]
+    if missing_rows or missing_cols:
+        raise ValueError(
+            f"Cost matrix mismatch. Missing rows: {missing_rows}, missing cols: {missing_cols}"
+        )
+
+    remaining_supply = {row["supplier"]: float(row["capacity_tons"]) for _, row in suppliers.iterrows()}
+    remaining_demand = {row["market"]: float(row["demand_tons"]) for _, row in markets.iterrows()}
+
+    # Build all edges with unit cost
+    edges = []
+    for s in supplier_names:
+        for m in market_names:
+            edges.append((float(costs.loc[s, m]), s, m))
+    edges.sort(key=lambda x: x[0])
+
+    shipments = []
+    total_cost = 0.0
+    for unit_cost, s, m in edges:
+        if remaining_supply[s] <= 0:
+            continue
+        if remaining_demand[m] <= 0:
+            continue
+        qty = min(remaining_supply[s], remaining_demand[m])
+        if qty <= 0:
+            continue
+        shipments.append({
+            "supplier": s,
+            "market": m,
+            "quantity_tons": qty,
+            "unit_cost": unit_cost,
+            "cost": qty * unit_cost,
+        })
+        remaining_supply[s] -= qty
+        remaining_demand[m] -= qty
+        total_cost += qty * unit_cost
+
+        # Stop early if all demand met
+        if all(v <= 1e-9 for v in remaining_demand.values()):
+            break
+
+    allocation = pd.DataFrame(shipments)
+    return allocation, float(total_cost)
+
+
+def render_supply_chain_tab() -> None:
+    st.subheader("Supply Chain Optimization")
+    st.caption("Allocate shipments from hubs to markets to minimize transport cost.")
+
+    if "sc_suppliers" not in st.session_state or "sc_markets" not in st.session_state or "sc_costs" not in st.session_state:
+        s, m, c = default_supply_chain()
+        st.session_state.sc_suppliers = s
+        st.session_state.sc_markets = m
+        st.session_state.sc_costs = c
+
+    st.markdown("Edit suppliers (capacity), markets (demand), and the cost matrix (currency per ton):")
+    colA, colB = st.columns([1, 1])
+    with colA:
+        st.write("Suppliers")
+        st.session_state.sc_suppliers = st.data_editor(
+            st.session_state.sc_suppliers,
+            num_rows="dynamic",
+            use_container_width=True,
+        )
+        st.write("Markets")
+        st.session_state.sc_markets = st.data_editor(
+            st.session_state.sc_markets,
+            num_rows="dynamic",
+            use_container_width=True,
+        )
+    with colB:
+        st.write("Cost matrix (rows: suppliers, columns: markets)")
+        st.session_state.sc_costs = st.data_editor(
+            st.session_state.sc_costs,
+            num_rows="dynamic",
+            use_container_width=True,
+        )
+
+    run = st.button("Optimize allocation", type="primary")
+    if run:
+        try:
+            allocation, total_cost = optimize_greedy(
+                st.session_state.sc_suppliers, st.session_state.sc_markets, st.session_state.sc_costs
+            )
+        except Exception as e:
+            st.error(f"Optimization error: {e}")
+            return
+
+        st.markdown(
+            f"""
+            <div class=\"metric-card\">
+              <div class=\"metric-title\">Total transport cost</div>
+              <div class=\"metric-value\">{total_cost:,.2f}</div>
+              <div class=\"subtle\">currency units</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if not allocation.empty:
+            st.write("Allocation plan")
+            st.dataframe(allocation, use_container_width=True, hide_index=True)
+
+            # Simple visualization: tons shipped per market
+            by_market = allocation.groupby("market")["quantity_tons"].sum().reindex(
+                st.session_state.sc_markets["market"].tolist()
+            ).fillna(0.0)
+            plt.style.use("seaborn-v0_8-whitegrid")
+            fig, ax = plt.subplots(figsize=(8, 3.5))
+            ax.bar(by_market.index, by_market.values, color="#66BB6A")
+            ax.set_ylabel("Tons shipped")
+            ax.set_title("Shipments by market")
+            st.pyplot(fig, use_container_width=True)
+        else:
+            st.info("No feasible shipments generated with the current inputs.")
+
+
 def main() -> None:
     render_header()
 
@@ -414,7 +578,7 @@ def main() -> None:
 
     render_sidebar(rmse)
 
-    tabs = st.tabs(["Yield Prediction", "Pest & Disease (Images)"])
+    tabs = st.tabs(["Yield Prediction", "Pest & Disease (Images)", "Supply Chain"])
 
     with tabs[0]:
         region, crop, rainfall, temperature, soil_quality = render_inputs()
@@ -564,6 +728,9 @@ def main() -> None:
             )
         else:
             st.info("Upload a plant/leaf photo to classify.")
+
+    with tabs[2]:
+        render_supply_chain_tab()
 
     with st.expander("Preview training data"):
         st.dataframe(data.head(200), use_container_width=True, hide_index=True)
