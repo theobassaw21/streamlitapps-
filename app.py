@@ -492,6 +492,40 @@ if user_query:
 	st.session_state.latest_forecast_df = forecast_df
 	st.session_state.latest_metrics = {"last_price": last_price, "change_pct": change_pct}
 
+# Render latest forecast (cards + chart) if available
+if st.session_state.latest_past_df is not None and st.session_state.latest_forecast_df is not None:
+	st.markdown('<div class="card">', unsafe_allow_html=True)
+	title_crop = clean_name(crop)
+	title_region = clean_name(region)
+	st.markdown(f'<div class="section-title">📈 Price Forecast for {title_crop} in {title_region}</div>', unsafe_allow_html=True)
+	m = st.session_state.latest_metrics or {}
+	m1, m2, m3 = st.columns(3)
+	with m1:
+		if "last_price" in m:
+			st.metric("Current Price", f"{m['last_price']:.2f}")
+	with m2:
+		if "change_pct" in m:
+			st.metric("Forecast Change", f"{abs(m['change_pct']):.0f}%", delta=f"{m['change_pct']:+.1f}%")
+	with m3:
+		if "change_pct" in m:
+			action = "Wait" if m['change_pct'] > 1.5 else ("Sell Now" if m['change_pct'] < -1.5 else "Flexible")
+			st.metric("Recommended Action", action)
+	chart = build_chart(st.session_state.latest_past_df, st.session_state.latest_forecast_df)
+	st.altair_chart(chart, use_container_width=True)
+	st.markdown('</div>', unsafe_allow_html=True)
+
+	# Sidebar download
+	with st.sidebar:
+		combined = pd.concat([st.session_state.latest_past_df, st.session_state.latest_forecast_df], ignore_index=True)
+		csv_bytes = combined.to_csv(index=False).encode("utf-8")
+		st.download_button(
+			"⬇️ Download data (CSV)",
+			data=csv_bytes,
+			file_name=f"smart_agri_prices_forecast.csv",
+			mime="text/csv",
+			use_container_width=True,
+		)
+
 # When farmer taps Get Advice
 if get_forecast:
 	# Clear any previous auto-messages to avoid clutter
