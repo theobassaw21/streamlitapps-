@@ -2,6 +2,7 @@ import hashlib
 from datetime import timedelta
 
 import altair as alt
+import time
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -70,6 +71,42 @@ div.stButton > button:focus { outline: none; box-shadow: 0 0 0 3px rgba(46,125,5
 .user .chat-bubble { background: #2e7d32; color: #ffffff; border-top-right-radius: 6px; }
 .quick-actions { border-top: 1px solid #e8ebe6; padding: 10px 16px 14px 16px; display: flex; gap: 8px; flex-wrap: wrap; }
 .qa-btn { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; border-radius: 999px; padding: 8px 12px; font-size: 0.95rem; }
+
+/* Design tokens */
+:root {
+  --primary: #2e7d32;
+  --primary-dark: #1b5e20;
+  --secondary: #8d6e63;
+  --bg: #FAFAF8;
+  --card: #ffffff;
+}
+
+/* Hero banner */
+.hero {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+  margin-bottom: 14px;
+}
+.hero::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(120deg, rgba(46,125,50,0.95), rgba(129,199,132,0.85));
+}
+.hero::after {
+  content: "";
+  position: absolute; inset: 0;
+  background-image: url('https://images.unsplash.com/photo-1464226184884-fa280b87c399?q=80&w=1600&auto=format&fit=crop');
+  background-size: cover; background-position: center; opacity: 0.20;
+}
+.hero-content { position: relative; padding: 34px 22px; text-align: center; color: #ffffff; }
+.hero-title { font-size: 2.2rem; font-weight: 800; margin: 0; }
+.hero-sub { font-size: 1.15rem; margin-top: 6px; opacity: 0.95; }
+.hero-bar { height: 6px; background: linear-gradient(90deg, #66bb6a, #43a047, #8d6e63); }
+
+/* Input card */
+.input-card { background: linear-gradient(180deg, #ffffff, #f7fbf7); }
 </style>
 """
 
@@ -80,9 +117,12 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 # ---------- Header ----------
 st.markdown(
 	"""
-	<div class="header-banner">
-	  <h1 class="header-title">🌱 Smart Agri-Advisor</h1>
-	  <p class="header-subtitle">“Your AI-powered guide for better farming decisions.”</p>
+	<div class="hero">
+	  <div class="hero-content">
+	    <h1 class="hero-title">🌱 Smart Agri-Advisor</h1>
+	    <p class="hero-sub">Your AI-powered guide for better farming decisions</p>
+	  </div>
+	  <div class="hero-bar"></div>
 	</div>
 	""",
 	unsafe_allow_html=True,
@@ -109,11 +149,19 @@ regions = [
 	"📍 Bolgatanga",
 ]
 
-with st.sidebar:
-	st.header("⚙️ Controls")
+# Input selection card (centered)
+st.markdown('<div class="card input-card">', unsafe_allow_html=True)
+st.markdown('<div class="section-title" style="text-align:center;">What would you like to know?</div>', unsafe_allow_html=True)
+st.markdown('<p style="text-align:center;color:#4f5b50;">Select your crop and market location for personalized advice</p>', unsafe_allow_html=True)
+
+c1, c2 = st.columns(2)
+with c1:
 	crop = st.selectbox("🌾 Crop", options=crops, index=0)
+with c2:
 	region = st.selectbox("📍 Market/Region", options=regions, index=0)
-	get_forecast = st.button("Get Smart Advice 🧑🏾‍🌾", use_container_width=True)
+
+get_forecast = st.button("🚀 Get Smart Advice", use_container_width=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ---------- Data + Forecast Utilities ----------
@@ -345,7 +393,7 @@ if not st.session_state.chat:
 # Chat panel
 st.markdown('<div class="card chat-panel">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">🤝 Advisor</div>', unsafe_allow_html=True)
-st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+st.markdown('<div class="chat-container" id="chatbox">', unsafe_allow_html=True)
 for role, text in st.session_state.chat:
 	css_cls = "assistant" if role == "assistant" else "user"
 	st.markdown(f'<div class="chat-message {css_cls}"><div class="chat-bubble">{text}</div></div>', unsafe_allow_html=True)
@@ -388,9 +436,17 @@ if get_forecast:
 	)
 	add_chat("assistant", bot_msg)
 
-	# Forecast chart under chat
+	# Metrics + Forecast chart under chat
 	st.markdown('<div class="card">', unsafe_allow_html=True)
 	st.markdown('<div class="section-title">📈 Price Forecast</div>', unsafe_allow_html=True)
+	m1, m2, m3 = st.columns(3)
+	with m1:
+		st.metric("Current Price", f"{last_price:.2f}")
+	with m2:
+		st.metric("Forecast Change", f"{abs(change_pct):.0f}%", delta=f"{change_pct:+.1f}%")
+	with m3:
+		action = "Wait" if change_pct > 1.5 else ("Sell Soon" if change_pct < -1.5 else "Flexible")
+		st.metric("Suggested Action", action)
 	chart = build_chart(past_df, forecast_df)
 	st.altair_chart(chart, use_container_width=True)
 	st.markdown('</div>', unsafe_allow_html=True)
