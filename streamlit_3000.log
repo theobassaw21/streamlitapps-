@@ -150,3 +150,48 @@ Traceback (most recent call last):
          ^^^^^^
 SyntaxError: invalid syntax
 2025-09-10 04:21:24.839 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-10 04:25:57.809 Script compilation error
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 571, in _run_script
+    code = self._script_cache.get_bytecode(script_path)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/script_cache.py", line 72, in get_bytecode
+    filebody = magic.add_magic(filebody, script_path)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/magic.py", line 45, in add_magic
+    tree = ast.parse(code, script_path, "exec")
+  File "/usr/lib/python3.13/ast.py", line 54, in parse
+    return compile(source, filename, mode, flags,
+                   _feature_version=feature_version, optimize=optimize)
+  File "/workspace/app.py", line 1
+    THIS SHOULD BE A LINTER ERRORimport hashlib
+         ^^^^^^
+SyntaxError: invalid syntax
+2025-09-10 04:25:57.810 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-10 04:26:31.644 Uncaught app execution
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 128, in exec_func_with_error_handling
+    result = func()
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 669, in code_to_exec
+    exec(code, module.__dict__)  # noqa: S102
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/app.py", line 519, in <module>
+    ai_text = ai_reply(context, user_query)
+  File "/workspace/app.py", line 390, in ai_reply
+    client = get_openai_client()
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/caching/cache_utils.py", line 227, in __call__
+    return self._get_or_create_cached_value(args, kwargs, spinner_message)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/caching/cache_utils.py", line 269, in _get_or_create_cached_value
+    return self._handle_cache_miss(cache, value_key, func_args, func_kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/caching/cache_utils.py", line 328, in _handle_cache_miss
+    computed_value = self._info.func(*func_args, **func_kwargs)
+  File "/workspace/app.py", line 381, in get_openai_client
+    api_key = st.secrets.get("OPENAI_API_KEY") if hasattr(st, "secrets") else None
+              ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "<frozen _collections_abc>", line 811, in get
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/secrets.py", line 476, in __getitem__
+    value = self._parse()[key]
+            ~~~~~~~~~~~^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/secrets.py", line 377, in _parse
+    raise StreamlitSecretNotFoundError(error_msg)
+streamlit.errors.StreamlitSecretNotFoundError: No secrets found. Valid paths for a secrets.toml file or secret directories are: /home/ubuntu/.streamlit/secrets.toml, /workspace/.streamlit/secrets.toml

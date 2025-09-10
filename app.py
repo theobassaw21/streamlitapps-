@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from sklearn.ensemble import RandomForestRegressor
+from openai import OpenAI
 
 
 st.set_page_config(
@@ -374,6 +375,45 @@ def build_chart(past_df: pd.DataFrame, forecast_df: pd.DataFrame) -> alt.Chart:
 	return chart
 
 
+# ---------- AI Chat Helper (OpenAI) ----------
+@st.cache_resource(show_spinner=False)
+def get_openai_client() -> OpenAI | None:
+	api_key = st.secrets.get("OPENAI_API_KEY") if hasattr(st, "secrets") else None
+	if not api_key:
+		api_key = os.environ.get("OPENAI_API_KEY")
+	if not api_key:
+		return None
+	return OpenAI(api_key=api_key)
+
+
+def ai_reply(context: dict, user_message: str) -> str | None:
+	client = get_openai_client()
+	if client is None:
+		return None
+	sys_prompt = (
+		"You are Smart Agri-Advisor, a friendly farming assistant."
+		" Speak simply, 2-4 short sentences, reference crop and market,"
+		" and offer one concrete next step. Avoid technical ML terms."
+	)
+	ctx = (
+		f"Crop: {context.get('crop')} | Market: {context.get('region')} | "
+		f"Current Price: {context.get('last_price'):.2f} | Forecast Change (%): {context.get('change_pct'):+.1f}"
+	)
+	try:
+		resp = client.chat.completions.create(
+			model="gpt-4o-mini",
+			messages=[
+				{"role": "system", "content": sys_prompt},
+				{"role": "user", "content": f"Context: {ctx}\nQuestion: {user_message}"},
+			],
+			max_tokens=180,
+			temperature=0.4,
+		)
+		return resp.choices[0].message.content.strip()
+	except Exception:
+		return None
+
+
 # ---------- Chat Advisor + Forecast ----------
 if "chat" not in st.session_state:
 	st.session_state.chat = []  # list of (role, text)
@@ -473,16 +513,23 @@ if user_query:
 	best_date = forecast_dates[best_idx]
 	best_price = float(pred_values[best_idx])
 	direction_text = "rise" if change_pct > 1.5 else ("fall" if change_pct < -1.5 else "stay stable")
-	resp = (
-		f"For {q_crop} in {q_region}, prices may {direction_text} about {abs(change_pct):.0f}% over the next 10 days. "
-		+ (
-			"If storage is safe, consider waiting until " + best_date.strftime("%b %d") + f" (around {best_price:.2f}). "
-			if change_pct > 1.5 else
-			"Selling sooner may protect your income. " if change_pct < -1.5 else
-			"Prices look steady—sell when convenient. "
+	# Prefer AI response if available
+	resp = None
+	context = {"crop": q_crop, "region": q_region, "last_price": last_price, "change_pct": change_pct}
+	ai_text = ai_reply(context, user_query)
+	if ai_text:
+		resp = ai_text
+	else:
+		resp = (
+			f"For {q_crop} in {q_region}, prices may {direction_text} about {abs(change_pct):.0f}% over the next 10 days. "
+			+ (
+				"If storage is safe, consider waiting until " + best_date.strftime("%b %d") + f" (around {best_price:.2f}). "
+				if change_pct > 1.5 else
+				"Selling sooner may protect your income. " if change_pct < -1.5 else
+				"Prices look steady—sell when convenient. "
+			)
+			+ "Want me to compare with another market like Accra or Tamale?"
 		)
-		+ "Want me to compare with another market like Accra or Tamale?"
-	)
 	# Typing indicator
 	st.markdown('<div class="chat-message assistant"><div class="chat-bubble"><span class="typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div></div>', unsafe_allow_html=True)
 	time.sleep(0.5)
@@ -556,7 +603,10 @@ if get_forecast:
 		"Selling sooner may protect your income. " if change_pct < -1.5 else
 		"Prices look steady. Sell when it suits your needs. "
 	)
-	bot_msg = (
+	# Prefer AI response for button-based advice too
+	context = {"crop": _crop, "region": _region, "last_price": last_price, "change_pct": change_pct}
+	ai_text = ai_reply(context, f"Give advice for {_crop} in {_region} for the next 10 days.")
+	bot_msg = ai_text if ai_text else (
 		f"Based on the latest price trends, {_crop} in {_region} could {direction_text} by about {abs(change_pct):.0f}% over the next 10 days. "
 		+ advice_tail +
 		"Would you like me to also check Tamale or Accra for comparison?"
