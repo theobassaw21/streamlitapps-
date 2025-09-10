@@ -378,8 +378,48 @@ def build_chart(past_df: pd.DataFrame, forecast_df: pd.DataFrame) -> alt.Chart:
 if "chat" not in st.session_state:
 	st.session_state.chat = []  # list of (role, text)
 
+# Keep latest forecast in session so free-form chat can reuse
+if "latest_past_df" not in st.session_state:
+	st.session_state.latest_past_df = None
+if "latest_forecast_df" not in st.session_state:
+	st.session_state.latest_forecast_df = None
+if "latest_metrics" not in st.session_state:
+	st.session_state.latest_metrics = None
+
 def add_chat(role: str, text: str) -> None:
 	st.session_state.chat.append((role, text))
+
+def extract_crop_region_from_text(text: str, default_crop: str, default_region: str) -> tuple[str, str]:
+	lc = text.lower()
+	crop_names = ["maize", "rice", "cassava", "cocoa", "yam", "plantain"]
+	region_names = ["accra", "kumasi", "tamale", "cape coast", "ho", "sunyani", "takoradi", "bolgatanga"]
+	chosen_crop = next((c for c in crop_names if c in lc), default_crop)
+	if "cape coast" in lc:
+		chosen_region = "Cape Coast"
+	else:
+		chosen_region = next((r.title() for r in region_names if r in lc), default_region)
+	return chosen_crop.capitalize(), chosen_region
+
+def set_latest(past_df: pd.DataFrame, forecast_df: pd.DataFrame, last_price: float, change_pct: float, best_date: pd.Timestamp, best_price: float) -> None:
+	st.session_state.latest_past_df = past_df
+	st.session_state.latest_forecast_df = forecast_df
+	st.session_state.latest_metrics = {
+		"last_price": last_price,
+		"change_pct": change_pct,
+		"best_date": best_date,
+		"best_price": best_price,
+	}
+
+def extract_crop_region_from_text(text: str, default_crop: str, default_region: str) -> tuple[str, str]:
+	lc = text.lower()
+	crop_names = ["maize", "rice", "cassava", "cocoa", "yam", "plantain"]
+	region_names = ["accra", "kumasi", "tamale", "cape coast", "ho", "sunyani", "takoradi", "bolgatanga"]
+	chosen_crop = next((c for c in crop_names if c in lc), clean_name(default_crop))
+	if "cape coast" in lc:
+		chosen_region = "cape coast"
+	else:
+		chosen_region = next((r for r in region_names if r in lc), clean_name(default_region))
+	return chosen_crop.capitalize(), chosen_region.title()
 
 # Seed a friendly greeting once
 if not st.session_state.chat:
@@ -397,6 +437,49 @@ for role, text in st.session_state.chat:
 st.markdown('</div>', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
+# Free-form chat input for follow-ups
+user_query = st.chat_input("Ask me anything about farming…")
+if user_query:
+	add_chat("user", user_query)
+	# Try to extract crop/region from message; fallback to selected ones
+	default_crop = clean_name(crop)
+	default_region = clean_name(region)
+	q_crop, q_region = extract_crop_region_from_text(user_query, default_crop, default_region)
+	# Forecast for this query
+	past_df = generate_historical_prices_days(q_crop, q_region, days=14)
+	last_date = past_df["Date"].max()
+	try:
+		pred_values = forecast_with_ml_steps(past_df["Price"], steps_ahead=10)
+	except Exception:
+		pred_values = forecast_next_steps(past_df["Price"], steps_ahead=10)
+	forecast_dates = [last_date + timedelta(days=i + 1) for i in range(len(pred_values))]
+	forecast_df = pd.DataFrame({"Date": forecast_dates, "Price": pred_values, "Status": "Forecast"})
+	last_price = float(past_df["Price"].iloc[-1])
+	avg_future = float(np.mean(pred_values))
+	change_pct = 0.0 if last_price == 0 else (avg_future - last_price) / last_price * 100.0
+	best_idx = int(np.argmax(pred_values)) if change_pct >= 1.5 else (0 if change_pct <= -1.5 else min(3, len(forecast_dates) - 1))
+	best_date = forecast_dates[best_idx]
+	best_price = float(pred_values[best_idx])
+	direction_text = "rise" if change_pct > 1.5 else ("fall" if change_pct < -1.5 else "stay stable")
+	resp = (
+		f"For {q_crop} in {q_region}, prices may {direction_text} about {abs(change_pct):.0f}% over the next 10 days. "
+		+ (
+			"If storage is safe, consider waiting until " + best_date.strftime("%b %d") + f" (around {best_price:.2f}). "
+			if change_pct > 1.5 else
+			"Selling sooner may protect your income. " if change_pct < -1.5 else
+			"Prices look steady—sell when convenient. "
+		)
+		+ "Want me to compare with another market like Accra or Tamale?"
+	)
+	# Typing indicator
+	st.markdown('<div class="chat-message assistant"><div class="chat-bubble"><span class="typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div></div>', unsafe_allow_html=True)
+	time.sleep(0.5)
+	add_chat("assistant", resp)
+	# Save latest for chart + download
+	st.session_state.latest_past_df = past_df
+	st.session_state.latest_forecast_df = forecast_df
+	st.session_state.latest_metrics = {"last_price": last_price, "change_pct": change_pct}
+
 # When farmer taps Get Advice
 if get_forecast:
 	# Data + forecast
@@ -411,8 +494,8 @@ if get_forecast:
 	forecast_dates = [last_date + timedelta(days=i + 1) for i in range(len(pred_values))]
 	forecast_df = pd.DataFrame({"Date": forecast_dates, "Price": pred_values, "Status": "Forecast"})
 
-	# Simple conversation turn
-	add_chat("user", f"I have {_crop} in {_region}.")
+	# Conversation turn (no forced phrasing)
+	add_chat("user", f"Advice for {_crop} in {_region}.")
 	last_price = float(past_df["Price"].iloc[-1])
 	avg_future = float(np.mean(pred_values))
 	change_pct = 0.0 if last_price == 0 else (avg_future - last_price) / last_price * 100.0
@@ -437,30 +520,8 @@ if get_forecast:
 	time.sleep(0.5)
 	add_chat("assistant", bot_msg)
 
-	# Metrics + Forecast chart under chat
-	st.markdown('<div class="card">', unsafe_allow_html=True)
-	st.markdown('<div class="section-title">📈 Price Forecast</div>', unsafe_allow_html=True)
-	m1, m2, m3 = st.columns(3)
-	with m1:
-		st.metric("Current Price", f"{last_price:.2f}")
-	with m2:
-		st.metric("Forecast Change", f"{abs(change_pct):.0f}%", delta=f"{change_pct:+.1f}%")
-	with m3:
-		action = "Wait" if change_pct > 1.5 else ("Sell Soon" if change_pct < -1.5 else "Flexible")
-		st.metric("Suggested Action", action)
-	chart = build_chart(past_df, forecast_df)
-	st.altair_chart(chart, use_container_width=True)
-	st.markdown('</div>', unsafe_allow_html=True)
-
-	# Sidebar download
-	with st.sidebar:
-		combined = pd.concat([past_df, forecast_df], ignore_index=True)
-		csv_bytes = combined.to_csv(index=False).encode("utf-8")
-		st.download_button(
-			"⬇️ Download data (CSV)",
-			data=csv_bytes,
-			file_name=f"{crop}_{region}_prices_forecast.csv",
-			mime="text/csv",
-			use_container_width=True,
-		)
+	# Store latest forecast for rendering below and in downloads
+	st.session_state.latest_past_df = past_df
+	st.session_state.latest_forecast_df = forecast_df
+	st.session_state.latest_metrics = {"last_price": last_price, "change_pct": change_pct}
 
