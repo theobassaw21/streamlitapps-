@@ -426,6 +426,12 @@ def extract_crop_region_from_text(text: str, default_crop: str, default_region: 
 # Chat panel
 st.markdown('<div class="card chat-panel">', unsafe_allow_html=True)
 st.markdown('<div class="section-title">🤖 Your AI Advisor <span style="font-size:0.9rem;color:#43a047;">● online</span></div>', unsafe_allow_html=True)
+# Clear chat button
+if st.button("🗑️ Clear chat", key="clear_chat", help="Clear this conversation"):
+	st.session_state.chat = []
+	st.session_state.latest_past_df = None
+	st.session_state.latest_forecast_df = None
+	st.session_state.latest_metrics = None
 st.markdown('<div class="chat-container" id="chatbox">', unsafe_allow_html=True)
 for role, text in st.session_state.chat:
 	css_cls = "assistant" if role == "assistant" else "user"
@@ -480,6 +486,8 @@ if user_query:
 
 # When farmer taps Get Advice
 if get_forecast:
+	# Clear any previous auto-messages to avoid clutter
+	st.session_state.chat = []
 	# Data + forecast
 	_crop = clean_name(crop)
 	_region = clean_name(region)
