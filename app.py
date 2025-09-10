@@ -2,6 +2,7 @@ import hashlib
 from datetime import timedelta, datetime
 
 import altair as alt
+import os
 import time
 import numpy as np
 import pandas as pd
@@ -378,17 +379,23 @@ def build_chart(past_df: pd.DataFrame, forecast_df: pd.DataFrame) -> alt.Chart:
 # ---------- AI Chat Helper (OpenAI) ----------
 @st.cache_resource(show_spinner=False)
 def get_openai_client() -> OpenAI | None:
-	api_key = st.secrets.get("OPENAI_API_KEY") if hasattr(st, "secrets") else None
-	if not api_key:
-		api_key = os.environ.get("OPENAI_API_KEY")
-	if not api_key:
+	try:
+		api_key = st.secrets.get("OPENAI_API_KEY") if hasattr(st, "secrets") else None
+		if not api_key:
+			api_key = os.environ.get("OPENAI_API_KEY")
+		if not api_key:
+			return None
+		return OpenAI(api_key=api_key)
+	except Exception:
 		return None
-	return OpenAI(api_key=api_key)
 
 
 def ai_reply(context: dict, user_message: str) -> str | None:
-	client = get_openai_client()
-	if client is None:
+	try:
+		client = get_openai_client()
+		if client is None:
+			return None
+	except Exception:
 		return None
 	sys_prompt = (
 		"You are Smart Agri-Advisor, a friendly farming assistant."
