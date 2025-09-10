@@ -77,17 +77,16 @@ st.markdown(
 )
 
 
-# ---------- Inputs ----------
+# ---------- Inputs (Sidebar) ----------
 crops = ["Maize", "Cassava", "Rice"]
 regions = ["Accra", "Kumasi", "Tamale"]
 
-left_col, right_col = st.columns(2)
-with left_col:
+with st.sidebar:
+	st.header("⚙️ Controls")
 	crop = st.selectbox("🌾 Crop", options=crops, index=0)
-with right_col:
 	region = st.selectbox("📍 Region/Market", options=regions, index=0)
-
-get_forecast = st.button("Get Forecast 📈", use_container_width=True)
+	weeks_ahead = st.slider("🔮 Forecast horizon (weeks)", min_value=2, max_value=4, value=3, step=1)
+	get_forecast = st.button("Get Forecast 📈", use_container_width=True)
 
 
 # ---------- Data + Forecast Utilities ----------
@@ -166,7 +165,6 @@ def build_chart(past_df: pd.DataFrame, forecast_df: pd.DataFrame) -> alt.Chart:
 # ---------- Outputs ----------
 if get_forecast:
 	past_df = generate_historical_prices(crop, region, weeks=16)
-	weeks_ahead = 3  # forecast horizon (2–4 weeks range)
 	last_date = past_df["Date"].max()
 	pred_values = forecast_next_weeks(past_df["Price"], weeks_ahead=weeks_ahead)
 	forecast_dates = [last_date + timedelta(weeks=i + 1) for i in range(weeks_ahead)]
@@ -179,21 +177,89 @@ if get_forecast:
 	st.altair_chart(chart, use_container_width=True)
 	st.markdown('</div>', unsafe_allow_html=True)
 
-	# Advisory card
+	# Sidebar download
+	with st.sidebar:
+		combined = pd.concat([past_df, forecast_df], ignore_index=True)
+		csv_bytes = combined.to_csv(index=False).encode("utf-8")
+		st.download_button(
+			"⬇️ Download data (CSV)",
+			data=csv_bytes,
+			file_name=f"{crop}_{region}_prices_forecast.csv",
+			mime="text/csv",
+			use_container_width=True,
+		)
+
+	# Enhanced Advisory card
 	last_price = float(past_df["Price"].iloc[-1])
 	avg_future = float(np.mean(pred_values))
 	change_pct = 0.0 if last_price == 0 else (avg_future - last_price) / last_price * 100.0
 
-	if change_pct > 2.0:
-		message = f"{crop} prices in {region} may rise in the next weeks. It could be better to wait before selling."
-	elif change_pct < -2.0:
-		message = f"{crop} prices in {region} may fall soon. Consider selling earlier to avoid lower prices."
+	# Trend analysis
+	series = past_df["Price"].astype(float)
+	idx = np.arange(len(series))
+	slope, intercept = np.polyfit(idx, series.to_numpy(), 1)
+	fitted = slope * idx + intercept
+	ss_res = float(np.sum((series.to_numpy() - fitted) ** 2))
+	ss_tot = float(np.sum((series.to_numpy() - float(np.mean(series))) ** 2)) or 1.0
+	r2 = max(0.0, min(1.0, 1.0 - ss_res / ss_tot))
+	residual_std = float(np.std(series.to_numpy() - fitted))
+	returns = series.pct_change().dropna()
+	vol_pct = float(np.std(returns) * 100.0) if not returns.empty else 0.0
+	confidence = 75.0 + (r2 - 0.5) * 40.0 - min(max(vol_pct - 1.0, 0.0) * 6.0, 30.0)
+	confidence = max(55.0, min(90.0, confidence))
+
+	# Direction and strength
+	abs_change = abs(change_pct)
+	if change_pct > 1.5:
+		direction = "⬆️ Rising"
+	elif change_pct < -1.5:
+		direction = "⬇️ Falling"
 	else:
-		message = f"{crop} prices in {region} look stable. You can sell when it is convenient."
+		direction = "➖ Stable"
+
+	if abs_change >= 6:
+		strength = "strong"
+	elif abs_change >= 3:
+		strength = "moderate"
+	else:
+		strength = "weak"
+
+	# Best week to sell
+	if change_pct >= 1.5:
+		best_idx = int(np.argmax(pred_values))
+	elif change_pct <= -1.5:
+		best_idx = 0
+	else:
+		best_idx = min(1, len(forecast_dates) - 1)
+	best_date = forecast_dates[best_idx]
+	best_price = float(pred_values[best_idx])
+	band = residual_std
+
+	tips = [
+		"Sell in groups to get a better price.",
+		"Check market prices in nearby towns before you move.",
+		"If storing, keep grain dry and off the floor.",
+	]
 
 	st.markdown('<div class="card">', unsafe_allow_html=True)
 	st.markdown('<div class="section-title">📝 Advisory</div>', unsafe_allow_html=True)
-	st.markdown(f'<div class="advisory-text">{message} This is only a guide. Check local market news.</div>', unsafe_allow_html=True)
+	st.markdown(
+		f'<div class="advisory-text">'
+		f'<strong>Trend:</strong> {direction} ({strength})<br>'
+		f'<strong>Confidence:</strong> {confidence:.0f}%<br>'
+		f'<strong>Best week to sell:</strong> {best_date.strftime("%b %d, %Y")} '
+		f'(around {best_price:.2f} ± {band:.2f})<br>'
+		f'<strong>Advice:</strong> ' + (
+			f"{crop} prices in {region} are likely to rise. Waiting may bring a better price."
+			if change_pct > 1.5 else
+			f"{crop} prices in {region} may drop. Selling sooner can protect your income."
+			if change_pct < -1.5 else
+			f"{crop} prices in {region} look steady. Sell when it suits your needs."
+		) + '<br>'
+		f'<strong>Tips:</strong>\n<ul><li>{tips[0]}</li><li>{tips[1]}</li><li>{tips[2]}</li></ul>'
+		f'This is a guide. Always check local market news.'</div>',
+		unsafe_allow_html=True,
+	)
 	st.markdown('</div>', unsafe_allow_html=True)
 else:
 	# Initial friendly nudge
