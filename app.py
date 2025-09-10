@@ -386,6 +386,14 @@ if "latest_forecast_df" not in st.session_state:
 if "latest_metrics" not in st.session_state:
 	st.session_state.latest_metrics = None
 
+# One-time reset to remove any old auto-seeded messages
+if st.session_state.get("app_version") != "no_autoseed_v1":
+	st.session_state.chat = []
+	st.session_state.latest_past_df = None
+	st.session_state.latest_forecast_df = None
+	st.session_state.latest_metrics = None
+	st.session_state.app_version = "no_autoseed_v1"
+
 def add_chat(role: str, text: str) -> None:
 	st.session_state.chat.append((role, text))
 
