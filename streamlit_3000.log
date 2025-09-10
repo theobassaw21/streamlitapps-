@@ -27,3 +27,27 @@ Traceback (most recent call last):
   File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/metrics_util.py", line 443, in wrapped_func
     result = non_optional_func(*args, **kwargs)
 TypeError: set_page_config() got an unexpected keyword argument 'title'
+2025-09-10 02:11:29.983 Uncaught app execution
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 128, in exec_func_with_error_handling
+    result = func()
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 669, in code_to_exec
+    exec(code, module.__dict__)  # noqa: S102
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/app.py", line 161, in <module>
+    chart = build_chart(past_df, forecast_df)
+  File "/workspace/app.py", line 142, in build_chart
+    past_line = base.mark_line(color="#2e7d32", strokeWidth=3).encode(detail=alt.value("Past")).transform_calculate(Date="datum.Date", Price="datum.Price").transform_filter(alt.datum.Status == "Past").properties()
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/altair/vegalite/v5/schema/channels.py", line 21788, in encode
+    kwargs = _infer_encoding_types(args, kwargs)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/altair/utils/core.py", line 981, in infer_encoding_types
+    return cache.infer_encoding_types(kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/altair/utils/core.py", line 896, in infer_encoding_types
+    encoding: self._wrap_in_channel(obj, encoding)
+              ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/altair/utils/core.py", line 882, in _wrap_in_channel
+    tp = channel["value" if "value" in obj else "field"]
+         ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'value'
