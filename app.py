@@ -59,6 +59,17 @@ div.stButton > button:focus { outline: none; box-shadow: 0 0 0 3px rgba(46,125,5
   .header-title { font-size: 1.55rem; }
   .header-subtitle { font-size: 0.95rem; }
 }
+
+/* Chat styles */
+.chat-panel { padding: 0; }
+.chat-container { max-height: 420px; overflow-y: auto; padding: 16px; }
+.chat-message { margin: 8px 0; display: flex; }
+.chat-bubble { padding: 12px 14px; border-radius: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); max-width: 92%; }
+.assistant .chat-bubble { background: #f1f8e9; color: #2e3b2e; border-top-left-radius: 6px; }
+.user { justify-content: flex-end; }
+.user .chat-bubble { background: #2e7d32; color: #ffffff; border-top-right-radius: 6px; }
+.quick-actions { border-top: 1px solid #e8ebe6; padding: 10px 16px 14px 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+.qa-btn { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; border-radius: 999px; padding: 8px 12px; font-size: 0.95rem; }
 </style>
 """
 
@@ -71,7 +82,7 @@ st.markdown(
 	"""
 	<div class="header-banner">
 	  <h1 class="header-title">🌱 Smart Agri-Advisor</h1>
-	  <p class="header-subtitle">“Helping Farmers Make Smarter Decisions.”</p>
+	  <p class="header-subtitle">“Your AI-powered guide for better farming decisions.”</p>
 	</div>
 	""",
 	unsafe_allow_html=True,
@@ -85,9 +96,9 @@ regions = ["Accra", "Kumasi", "Tamale"]
 with st.sidebar:
 	st.header("⚙️ Controls")
 	crop = st.selectbox("🌾 Crop", options=crops, index=0)
-	region = st.selectbox("📍 Region/Market", options=regions, index=0)
+	region = st.selectbox("📍 Market/Region", options=regions, index=0)
 	weeks_ahead = st.slider("🔮 Forecast horizon (weeks)", min_value=2, max_value=4, value=3, step=1)
-	get_forecast = st.button("Get Forecast 📈", use_container_width=True)
+	get_forecast = st.button("Get Advice 🧑🏾‍🌾", use_container_width=True)
 
 
 # ---------- Data + Forecast Utilities ----------
@@ -236,11 +247,32 @@ def build_chart(past_df: pd.DataFrame, forecast_df: pd.DataFrame) -> alt.Chart:
 	return alt.layer(past_line, forecast_line, forecast_points).properties(height=360)
 
 
-# ---------- Outputs ----------
+# ---------- Chat Advisor + Forecast ----------
+if "chat" not in st.session_state:
+	st.session_state.chat = []  # list of (role, text)
+
+def add_chat(role: str, text: str) -> None:
+	st.session_state.chat.append((role, text))
+
+# Seed a friendly greeting once
+if not st.session_state.chat:
+	add_chat("assistant", "Hello! Pick your crop and market, then tap ‘Get Advice’. I’ll guide you.")
+
+# Chat panel
+st.markdown('<div class="card chat-panel">', unsafe_allow_html=True)
+st.markdown('<div class="section-title">🤝 Advisor</div>', unsafe_allow_html=True)
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+for role, text in st.session_state.chat:
+	css_cls = "assistant" if role == "assistant" else "user"
+	st.markdown(f'<div class="chat-message {css_cls}"><div class="chat-bubble">{text}</div></div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# When farmer taps Get Advice
 if get_forecast:
+	# Data + forecast
 	past_df = generate_historical_prices(crop, region, weeks=16)
 	last_date = past_df["Date"].max()
-	# Use AI model behind the scenes; fallback to simple trend on error
 	try:
 		pred_values, _ = forecast_with_ml(past_df["Price"], weeks_ahead=weeks_ahead)
 	except Exception:
@@ -248,7 +280,29 @@ if get_forecast:
 	forecast_dates = [last_date + timedelta(weeks=i + 1) for i in range(weeks_ahead)]
 	forecast_df = pd.DataFrame({"Date": forecast_dates, "Price": pred_values, "Status": "Forecast"})
 
-	# Chart card
+	# Simple conversation turn
+	add_chat("user", f"I have {crop} in {region}.")
+	last_price = float(past_df["Price"].iloc[-1])
+	avg_future = float(np.mean(pred_values))
+	change_pct = 0.0 if last_price == 0 else (avg_future - last_price) / last_price * 100.0
+	direction_text = "rise" if change_pct > 1.5 else ("fall" if change_pct < -1.5 else "stay stable")
+	best_idx = int(np.argmax(pred_values)) if change_pct >= 1.5 else (0 if change_pct <= -1.5 else min(1, len(forecast_dates) - 1))
+	best_date = forecast_dates[best_idx]
+	best_price = float(pred_values[best_idx])
+	advice_tail = (
+		"If you can store safely, consider waiting until " + best_date.strftime("%b %d") + f" (around {best_price:.2f}). "
+		if change_pct > 1.5 else
+		"Selling sooner may protect your income. " if change_pct < -1.5 else
+		"Prices look steady. Sell when it suits your needs. "
+	)
+	bot_msg = (
+		f"Based on recent price trends, {crop} in {region} could {direction_text} by about {abs(change_pct):.0f}% in the next {weeks_ahead} week(s). "
+		+ advice_tail +
+		"Would you like me to also check another market for comparison?"
+	)
+	add_chat("assistant", bot_msg)
+
+	# Forecast chart under chat
 	st.markdown('<div class="card">', unsafe_allow_html=True)
 	st.markdown('<div class="section-title">📈 Price Forecast</div>', unsafe_allow_html=True)
 	chart = build_chart(past_df, forecast_df)
@@ -266,92 +320,4 @@ if get_forecast:
 			mime="text/csv",
 			use_container_width=True,
 		)
-
-	# Enhanced Advisory card
-	last_price = float(past_df["Price"].iloc[-1])
-	avg_future = float(np.mean(pred_values))
-	change_pct = 0.0 if last_price == 0 else (avg_future - last_price) / last_price * 100.0
-
-	# Trend analysis
-	series = past_df["Price"].astype(float)
-	idx = np.arange(len(series))
-	slope, intercept = np.polyfit(idx, series.to_numpy(), 1)
-	fitted = slope * idx + intercept
-	ss_res = float(np.sum((series.to_numpy() - fitted) ** 2))
-	ss_tot = float(np.sum((series.to_numpy() - float(np.mean(series))) ** 2)) or 1.0
-	r2 = max(0.0, min(1.0, 1.0 - ss_res / ss_tot))
-	residual_std = float(np.std(series.to_numpy() - fitted))
-	returns = series.pct_change().dropna()
-	vol_pct = float(np.std(returns) * 100.0) if not returns.empty else 0.0
-	confidence = 75.0 + (r2 - 0.5) * 40.0 - min(max(vol_pct - 1.0, 0.0) * 6.0, 30.0)
-	confidence = max(55.0, min(90.0, confidence))
-
-	# Direction and strength
-	abs_change = abs(change_pct)
-	if change_pct > 1.5:
-		direction = "⬆️ Rising"
-	elif change_pct < -1.5:
-		direction = "⬇️ Falling"
-	else:
-		direction = "➖ Stable"
-
-	if abs_change >= 6:
-		strength = "strong"
-	elif abs_change >= 3:
-		strength = "moderate"
-	else:
-		strength = "weak"
-
-	# Best week to sell
-	if change_pct >= 1.5:
-		best_idx = int(np.argmax(pred_values))
-	elif change_pct <= -1.5:
-		best_idx = 0
-	else:
-		best_idx = min(1, len(forecast_dates) - 1)
-	best_date = forecast_dates[best_idx]
-	best_price = float(pred_values[best_idx])
-	band = residual_std
-
-	tips = [
-		"Sell in groups to get a better price.",
-		"Check market prices in nearby towns before you move.",
-		"If storing, keep grain dry and off the floor.",
-	]
-
-	st.markdown('<div class="card">', unsafe_allow_html=True)
-	st.markdown('<div class="section-title">📝 Advisory</div>', unsafe_allow_html=True)
-	st.markdown(
-		(
-			f'<div class="advisory-text">'
-			f'<strong>Trend:</strong> {direction} ({strength})<br>'
-			f'<strong>Confidence:</strong> {confidence:.0f}%<br>'
-			f'<strong>Best week to sell:</strong> {best_date.strftime("%b %d, %Y")} '
-			f'(around {best_price:.2f} ± {band:.2f})<br>'
-			f'<strong>Advice:</strong> ' + (
-				f"{crop} prices in {region} are likely to rise. Waiting may bring a better price."
-				if change_pct > 1.5 else
-				f"{crop} prices in {region} may drop. Selling sooner can protect your income."
-				if change_pct < -1.5 else
-				f"{crop} prices in {region} look steady. Sell when it suits your needs."
-			) + '<br>'
-			f'<strong>Tips:</strong>'
-			f'<ul><li>{tips[0]}</li><li>{tips[1]}</li><li>{tips[2]}</li></ul>'
-			'This is a guide. Always check local market news.'
-			'</div>'
-		),
-		unsafe_allow_html=True,
-	)
-	st.markdown('</div>', unsafe_allow_html=True)
-else:
-	# Initial friendly nudge
-	st.markdown('<div class="card">', unsafe_allow_html=True)
-	st.markdown('<div class="section-title">📈 Price Forecast</div>', unsafe_allow_html=True)
-	st.info("Pick a crop and a market, then tap ‘Get Forecast’.", icon="ℹ️")
-	st.markdown('</div>', unsafe_allow_html=True)
-
-	st.markdown('<div class="card">', unsafe_allow_html=True)
-	st.markdown('<div class="section-title">📝 Advisory</div>', unsafe_allow_html=True)
-	st.info("Your simple advice will appear here after the forecast.")
-	st.markdown('</div>', unsafe_allow_html=True)
 
