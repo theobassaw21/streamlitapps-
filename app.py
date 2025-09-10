@@ -1,5 +1,5 @@
 import hashlib
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 import altair as alt
 import time
@@ -63,7 +63,7 @@ div.stButton > button:focus { outline: none; box-shadow: 0 0 0 3px rgba(46,125,5
 
 /* Chat styles */
 .chat-panel { padding: 0; }
-.chat-container { max-height: 420px; overflow-y: auto; padding: 16px; }
+.chat-container { max-height: 420px; overflow-y: auto; padding: 16px; scroll-behavior: smooth; }
 .chat-message { margin: 8px 0; display: flex; }
 .chat-bubble { padding: 12px 14px; border-radius: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); max-width: 92%; }
 .assistant .chat-bubble { background: #f1f8e9; color: #2e3b2e; border-top-left-radius: 6px; }
@@ -71,6 +71,12 @@ div.stButton > button:focus { outline: none; box-shadow: 0 0 0 3px rgba(46,125,5
 .user .chat-bubble { background: #2e7d32; color: #ffffff; border-top-right-radius: 6px; }
 .quick-actions { border-top: 1px solid #e8ebe6; padding: 10px 16px 14px 16px; display: flex; gap: 8px; flex-wrap: wrap; }
 .qa-btn { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; border-radius: 999px; padding: 8px 12px; font-size: 0.95rem; }
+.chat-meta { font-size: 0.75rem; color: #6b7280; margin-top: 2px; }
+.typing { display: inline-block; }
+.typing .dot { height: 6px; width: 6px; margin: 0 2px; background: #9ca3af; border-radius: 50%; display: inline-block; animation: blink 1.4s infinite both; }
+.typing .dot:nth-child(2) { animation-delay: .2s; }
+.typing .dot:nth-child(3) { animation-delay: .4s; }
+@keyframes blink { 0% { opacity: .2; } 20% { opacity: 1; } 100% { opacity: .2; } }
 
 /* Design tokens */
 :root {
@@ -348,35 +354,24 @@ def forecast_with_ml_steps(past_prices: pd.Series, steps_ahead: int = 7) -> np.n
 
 
 def build_chart(past_df: pd.DataFrame, forecast_df: pd.DataFrame) -> alt.Chart:
-	tooltip = [alt.Tooltip("Date:T", title="Date"), alt.Tooltip("Price:Q", title="Price")]
-	past_line = (
-		alt.Chart(past_df)
-		.mark_line(color="#2e7d32", strokeWidth=3)
-		.encode(
-			x=alt.X("Date:T", title="Date"),
-			y=alt.Y("Price:Q", title="Price"),
-			tooltip=tooltip,
-		)
+	combined = pd.concat([past_df.assign(Status="Historical"), forecast_df.assign(Status="Predicted")], ignore_index=True)
+	color_scale = alt.Scale(domain=["Historical", "Predicted"], range=["#3b82f6", "#10b981"])
+	tooltip = [
+		alt.Tooltip("Date:T", title="Date"),
+		alt.Tooltip("Price:Q", title="Price (GHS)", format=".2f"),
+		alt.Tooltip("Status:N", title="Type"),
+	]
+	base = alt.Chart(combined).encode(
+		x=alt.X("Date:T", title="Date"),
+		y=alt.Y("Price:Q", title="Price (GHS)", stack=None),
+		color=alt.Color("Status:N", scale=color_scale, legend=alt.Legend(title="")),
+		tooltip=tooltip,
 	)
-	forecast_line = (
-		alt.Chart(forecast_df)
-		.mark_line(color="#8d6e63", strokeDash=[6, 4], strokeWidth=3)
-		.encode(
-			x=alt.X("Date:T", title="Date"),
-			y=alt.Y("Price:Q", title="Price"),
-			tooltip=tooltip,
-		)
-	)
-	forecast_points = (
-		alt.Chart(forecast_df)
-		.mark_point(color="#8d6e63", filled=True, size=60)
-		.encode(
-			x=alt.X("Date:T", title="Date"),
-			y=alt.Y("Price:Q", title="Price"),
-			tooltip=tooltip,
-		)
-	)
-	return alt.layer(past_line, forecast_line, forecast_points).properties(height=360)
+	area = base.mark_area(opacity=0.3).encode()
+	line = base.mark_line(size=3).encode()
+	points = base.mark_point(size=40, filled=True).encode()
+	chart = alt.layer(area, line, points).properties(height=340)
+	return chart
 
 
 # ---------- Chat Advisor + Forecast ----------
@@ -388,15 +383,17 @@ def add_chat(role: str, text: str) -> None:
 
 # Seed a friendly greeting once
 if not st.session_state.chat:
-	add_chat("assistant", "Hello! Pick your crop and market, then tap ‘Get Smart Advice’. I’ll guide you.")
+	add_chat("assistant", "Hello! I'm your AI farming advisor. Select a crop and region above to get started.")
 
 # Chat panel
 st.markdown('<div class="card chat-panel">', unsafe_allow_html=True)
-st.markdown('<div class="section-title">🤝 Advisor</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">🤖 Your AI Advisor <span style="font-size:0.9rem;color:#43a047;">● online</span></div>', unsafe_allow_html=True)
 st.markdown('<div class="chat-container" id="chatbox">', unsafe_allow_html=True)
 for role, text in st.session_state.chat:
 	css_cls = "assistant" if role == "assistant" else "user"
-	st.markdown(f'<div class="chat-message {css_cls}"><div class="chat-bubble">{text}</div></div>', unsafe_allow_html=True)
+	stamp = datetime.now().strftime("%I:%M %p").lstrip("0")
+	avatar = '🤖 ' if css_cls == 'assistant' else ''
+	st.markdown(f'<div class="chat-message {css_cls}"><div class="chat-bubble">{avatar}{text}<div class="chat-meta">{stamp}</div></div></div>', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -434,6 +431,10 @@ if get_forecast:
 		+ advice_tail +
 		"Would you like me to also check Tamale or Accra for comparison?"
 	)
+	# Simulate typing indicator
+	st.markdown('<div class="chat-message assistant"><div class="chat-bubble"><span class="typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div></div>', unsafe_allow_html=True)
+	# Small delay to feel conversational
+	time.sleep(0.5)
 	add_chat("assistant", bot_msg)
 
 	# Metrics + Forecast chart under chat
