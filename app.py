@@ -494,8 +494,7 @@ if get_forecast:
 	forecast_dates = [last_date + timedelta(days=i + 1) for i in range(len(pred_values))]
 	forecast_df = pd.DataFrame({"Date": forecast_dates, "Price": pred_values, "Status": "Forecast"})
 
-	# Conversation turn (no forced phrasing)
-	add_chat("user", f"Advice for {_crop} in {_region}.")
+	# Generate assistant advice without adding a user-simulated message
 	last_price = float(past_df["Price"].iloc[-1])
 	avg_future = float(np.mean(pred_values))
 	change_pct = 0.0 if last_price == 0 else (avg_future - last_price) / last_price * 100.0
