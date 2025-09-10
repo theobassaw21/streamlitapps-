@@ -8,7 +8,7 @@ import streamlit as st
 
 
 st.set_page_config(
-	title="Smart Agri-Advisor",
+	page_title="Smart Agri-Advisor",
 	page_icon="🌱",
 	layout="centered",
 )
