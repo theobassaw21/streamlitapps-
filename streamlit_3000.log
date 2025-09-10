@@ -38,3 +38,19 @@ Traceback (most recent call last):
     		                                                         ^
 SyntaxError: unterminated string literal (detected at line 260)
 2025-09-10 02:34:49.447 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+2025-09-10 03:42:55.059 Script compilation error
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 571, in _run_script
+    code = self._script_cache.get_bytecode(script_path)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/script_cache.py", line 72, in get_bytecode
+    filebody = magic.add_magic(filebody, script_path)
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/magic.py", line 45, in add_magic
+    tree = ast.parse(code, script_path, "exec")
+  File "/usr/lib/python3.13/ast.py", line 54, in parse
+    return compile(source, filename, mode, flags,
+                   _feature_version=feature_version, optimize=optimize)
+  File "/workspace/app.py", line 1
+    THIS SHOULD BE A LINTER ERRORimport hashlib
+         ^^^^^^
+SyntaxError: invalid syntax
+2025-09-10 03:42:55.060 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.

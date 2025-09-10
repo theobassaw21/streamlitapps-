@@ -90,15 +90,30 @@ st.markdown(
 
 
 # ---------- Inputs (Sidebar) ----------
-crops = ["Maize", "Cassava", "Rice"]
-regions = ["Accra", "Kumasi", "Tamale"]
+crops = [
+	"🌽 Maize",
+	"🌾 Rice",
+	"🍠 Cassava",
+	"🍫 Cocoa",
+	"🍯 Yam",
+	"🍌 Plantain",
+]
+regions = [
+	"📍 Accra",
+	"📍 Kumasi",
+	"📍 Tamale",
+	"📍 Cape Coast",
+	"📍 Takoradi",
+	"📍 Ho",
+	"📍 Sunyani",
+	"📍 Bolgatanga",
+]
 
 with st.sidebar:
 	st.header("⚙️ Controls")
 	crop = st.selectbox("🌾 Crop", options=crops, index=0)
 	region = st.selectbox("📍 Market/Region", options=regions, index=0)
-	weeks_ahead = st.slider("🔮 Forecast horizon (weeks)", min_value=2, max_value=4, value=3, step=1)
-	get_forecast = st.button("Get Advice 🧑🏾‍🌾", use_container_width=True)
+	get_forecast = st.button("Get Smart Advice 🧑🏾‍🌾", use_container_width=True)
 
 
 # ---------- Data + Forecast Utilities ----------
@@ -130,6 +145,41 @@ def generate_historical_prices(crop_name: str, region_name: str, weeks: int = 16
 	return data
 
 
+def clean_name(label: str) -> str:
+	first_space = label.find(" ")
+	return label[first_space + 1 :] if first_space > 0 else label
+
+
+@st.cache_data(show_spinner=False)
+def generate_historical_prices_days(crop_name: str, region_name: str, days: int = 14) -> pd.DataFrame:
+	seed_value = _seed_from(crop_name, region_name)
+	rng = np.random.default_rng(seed_value)
+	base_price_map = {
+		"Maize": 80.0,
+		"Cassava": 50.0,
+		"Rice": 120.0,
+		"Cocoa": 150.0,
+		"Yam": 70.0,
+		"Plantain": 60.0,
+	}
+	base_price = base_price_map.get(crop_name, 80.0)
+
+	trend_per_day = rng.normal(0.0, 0.15)
+	seasonal = np.sin(np.linspace(0, 2 * np.pi, days)) * rng.uniform(0.0, 1.2)
+	noise = rng.normal(0.0, 1.2, days)
+	prices: list[float] = []
+	price_level = base_price + rng.uniform(-3.0, 3.0)
+	for i in range(days):
+		price_level = price_level + trend_per_day + seasonal[i] * 0.2 + noise[i] * 0.2
+		prices.append(max(base_price * 0.5, float(price_level)))
+
+	end_date = pd.Timestamp.today().normalize()
+	dates = [end_date - pd.Timedelta(days=(days - i)) for i in range(days)]
+	data = pd.DataFrame({"Date": dates, "Price": prices})
+	data["Status"] = "Past"
+	return data
+
+
 def forecast_next_weeks(past_prices: pd.Series, weeks_ahead: int = 3) -> np.ndarray:
 	indices = np.arange(len(past_prices))
 	# Simple linear trend forecast
@@ -140,6 +190,15 @@ def forecast_next_weeks(past_prices: pd.Series, weeks_ahead: int = 3) -> np.ndar
 	# Ensure non-negative and reasonable smoothing
 	pred = np.maximum(pred, 0.0)
 	return pred
+
+
+def forecast_next_steps(past_prices: pd.Series, steps_ahead: int = 7) -> np.ndarray:
+	indices = np.arange(len(past_prices))
+	coeffs = np.polyfit(indices, past_prices.to_numpy(), 1)
+	trend_fn = np.poly1d(coeffs)
+	future_indices = np.arange(len(past_prices), len(past_prices) + steps_ahead)
+	pred = trend_fn(future_indices)
+	return np.maximum(pred, 0.0)
 
 
 def _create_lag_features(series: np.ndarray, num_lags: int = 6) -> tuple[np.ndarray, np.ndarray, int]:
@@ -215,6 +274,31 @@ def forecast_with_ml(past_prices: pd.Series, weeks_ahead: int = 3) -> tuple[np.n
 	return np.array(forecast), {"model": "RandomForest", "mae": mae, "r2": None}
 
 
+def forecast_with_ml_steps(past_prices: pd.Series, steps_ahead: int = 7) -> np.ndarray:
+	series = past_prices.to_numpy().astype(float)
+	if len(series) < 10:
+		return forecast_next_steps(past_prices, steps_ahead)
+	lag_count = min(6, max(4, len(series) // 3))
+	X, y, next_index = _create_lag_features(series, num_lags=lag_count)
+	if len(X) < 4:
+		return forecast_next_steps(past_prices, steps_ahead)
+	model = RandomForestRegressor(n_estimators=200, random_state=42, max_depth=6)
+	model.fit(X, y)
+	forecast: list[float] = []
+	window = list(series[-lag_count:])
+	for step in range(steps_ahead):
+		idx = next_index + step
+		lags = [float(window[-j - 1]) for j in range(lag_count)]
+		feat = np.array([[*lags, idx, np.sin(2 * np.pi * idx / 12.0), np.cos(2 * np.pi * idx / 12.0)]])
+		pred_val = float(model.predict(feat)[0])
+		pred_val = max(0.0, pred_val)
+		forecast.append(pred_val)
+		window.append(pred_val)
+		if len(window) > lag_count:
+			window.pop(0)
+	return np.array(forecast)
+
+
 def build_chart(past_df: pd.DataFrame, forecast_df: pd.DataFrame) -> alt.Chart:
 	tooltip = [alt.Tooltip("Date:T", title="Date"), alt.Tooltip("Price:Q", title="Price")]
 	past_line = (
@@ -256,7 +340,7 @@ def add_chat(role: str, text: str) -> None:
 
 # Seed a friendly greeting once
 if not st.session_state.chat:
-	add_chat("assistant", "Hello! Pick your crop and market, then tap ‘Get Advice’. I’ll guide you.")
+	add_chat("assistant", "Hello! Pick your crop and market, then tap ‘Get Smart Advice’. I’ll guide you.")
 
 # Chat panel
 st.markdown('<div class="card chat-panel">', unsafe_allow_html=True)
@@ -271,22 +355,24 @@ st.markdown('</div>', unsafe_allow_html=True)
 # When farmer taps Get Advice
 if get_forecast:
 	# Data + forecast
-	past_df = generate_historical_prices(crop, region, weeks=16)
+	_crop = clean_name(crop)
+	_region = clean_name(region)
+	past_df = generate_historical_prices_days(_crop, _region, days=14)
 	last_date = past_df["Date"].max()
 	try:
-		pred_values, _ = forecast_with_ml(past_df["Price"], weeks_ahead=weeks_ahead)
+		pred_values = forecast_with_ml_steps(past_df["Price"], steps_ahead=10)
 	except Exception:
-		pred_values = forecast_next_weeks(past_df["Price"], weeks_ahead=weeks_ahead)
-	forecast_dates = [last_date + timedelta(weeks=i + 1) for i in range(weeks_ahead)]
+		pred_values = forecast_next_steps(past_df["Price"], steps_ahead=10)
+	forecast_dates = [last_date + timedelta(days=i + 1) for i in range(len(pred_values))]
 	forecast_df = pd.DataFrame({"Date": forecast_dates, "Price": pred_values, "Status": "Forecast"})
 
 	# Simple conversation turn
-	add_chat("user", f"I have {crop} in {region}.")
+	add_chat("user", f"I have {_crop} in {_region}.")
 	last_price = float(past_df["Price"].iloc[-1])
 	avg_future = float(np.mean(pred_values))
 	change_pct = 0.0 if last_price == 0 else (avg_future - last_price) / last_price * 100.0
 	direction_text = "rise" if change_pct > 1.5 else ("fall" if change_pct < -1.5 else "stay stable")
-	best_idx = int(np.argmax(pred_values)) if change_pct >= 1.5 else (0 if change_pct <= -1.5 else min(1, len(forecast_dates) - 1))
+	best_idx = int(np.argmax(pred_values)) if change_pct >= 1.5 else (0 if change_pct <= -1.5 else min(3, len(forecast_dates) - 1))
 	best_date = forecast_dates[best_idx]
 	best_price = float(pred_values[best_idx])
 	advice_tail = (
@@ -296,9 +382,9 @@ if get_forecast:
 		"Prices look steady. Sell when it suits your needs. "
 	)
 	bot_msg = (
-		f"Based on recent price trends, {crop} in {region} could {direction_text} by about {abs(change_pct):.0f}% in the next {weeks_ahead} week(s). "
+		f"Based on the latest price trends, {_crop} in {_region} could {direction_text} by about {abs(change_pct):.0f}% over the next 10 days. "
 		+ advice_tail +
-		"Would you like me to also check another market for comparison?"
+		"Would you like me to also check Tamale or Accra for comparison?"
 	)
 	add_chat("assistant", bot_msg)
 
