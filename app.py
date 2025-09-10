@@ -244,20 +244,24 @@ if get_forecast:
 	st.markdown('<div class="card">', unsafe_allow_html=True)
 	st.markdown('<div class="section-title">📝 Advisory</div>', unsafe_allow_html=True)
 	st.markdown(
-		f'<div class="advisory-text">'
-		f'<strong>Trend:</strong> {direction} ({strength})<br>'
-		f'<strong>Confidence:</strong> {confidence:.0f}%<br>'
-		f'<strong>Best week to sell:</strong> {best_date.strftime("%b %d, %Y")} '
-		f'(around {best_price:.2f} ± {band:.2f})<br>'
-		f'<strong>Advice:</strong> ' + (
-			f"{crop} prices in {region} are likely to rise. Waiting may bring a better price."
-			if change_pct > 1.5 else
-			f"{crop} prices in {region} may drop. Selling sooner can protect your income."
-			if change_pct < -1.5 else
-			f"{crop} prices in {region} look steady. Sell when it suits your needs."
-		) + '<br>'
-		f'<strong>Tips:</strong>\n<ul><li>{tips[0]}</li><li>{tips[1]}</li><li>{tips[2]}</li></ul>'
-		f'This is a guide. Always check local market news.'</div>',
+		(
+			f'<div class="advisory-text">'
+			f'<strong>Trend:</strong> {direction} ({strength})<br>'
+			f'<strong>Confidence:</strong> {confidence:.0f}%<br>'
+			f'<strong>Best week to sell:</strong> {best_date.strftime("%b %d, %Y")} '
+			f'(around {best_price:.2f} ± {band:.2f})<br>'
+			f'<strong>Advice:</strong> ' + (
+				f"{crop} prices in {region} are likely to rise. Waiting may bring a better price."
+				if change_pct > 1.5 else
+				f"{crop} prices in {region} may drop. Selling sooner can protect your income."
+				if change_pct < -1.5 else
+				f"{crop} prices in {region} look steady. Sell when it suits your needs."
+			) + '<br>'
+			f'<strong>Tips:</strong>'
+			f'<ul><li>{tips[0]}</li><li>{tips[1]}</li><li>{tips[2]}</li></ul>'
+			'This is a guide. Always check local market news.'
+			'</div>'
+		),
 		unsafe_allow_html=True,
 	)
 	st.markdown('</div>', unsafe_allow_html=True)
