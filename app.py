@@ -87,7 +87,6 @@ with st.sidebar:
 	crop = st.selectbox("🌾 Crop", options=crops, index=0)
 	region = st.selectbox("📍 Region/Market", options=regions, index=0)
 	weeks_ahead = st.slider("🔮 Forecast horizon (weeks)", min_value=2, max_value=4, value=3, step=1)
-	method = st.radio("🧠 Forecast method", ["AI (Random Forest)", "Simple (Trend)"], index=0)
 	get_forecast = st.button("Get Forecast 📈", use_container_width=True)
 
 
@@ -241,11 +240,11 @@ def build_chart(past_df: pd.DataFrame, forecast_df: pd.DataFrame) -> alt.Chart:
 if get_forecast:
 	past_df = generate_historical_prices(crop, region, weeks=16)
 	last_date = past_df["Date"].max()
-	if method.startswith("AI"):
-		pred_values, model_info = forecast_with_ml(past_df["Price"], weeks_ahead=weeks_ahead)
-	else:
+	# Use AI model behind the scenes; fallback to simple trend on error
+	try:
+		pred_values, _ = forecast_with_ml(past_df["Price"], weeks_ahead=weeks_ahead)
+	except Exception:
 		pred_values = forecast_next_weeks(past_df["Price"], weeks_ahead=weeks_ahead)
-		model_info = {"model": "Trend", "mae": None, "r2": None}
 	forecast_dates = [last_date + timedelta(weeks=i + 1) for i in range(weeks_ahead)]
 	forecast_df = pd.DataFrame({"Date": forecast_dates, "Price": pred_values, "Status": "Forecast"})
 
@@ -325,10 +324,8 @@ if get_forecast:
 	st.markdown(
 		(
 			f'<div class="advisory-text">'
-			f'<strong>Engine:</strong> {"AI (" + model_info["model"] + ")" if method.startswith("AI") else "Simple (Trend)"}<br>'
 			f'<strong>Trend:</strong> {direction} ({strength})<br>'
 			f'<strong>Confidence:</strong> {confidence:.0f}%<br>'
-			+ (f'<strong>Backtest MAE:</strong> {model_info["mae"]:.2f}<br>' if model_info.get("mae") is not None else '')
 			f'<strong>Best week to sell:</strong> {best_date.strftime("%b %d, %Y")} '
 			f'(around {best_price:.2f} ± {band:.2f})<br>'
 			f'<strong>Advice:</strong> ' + (
