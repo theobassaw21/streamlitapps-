@@ -1,45 +1,21 @@
-2025-09-10T02:31:54Z INF Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to experiment and try it out. However, be aware that these account-less Tunnels have no uptime guarantee, are subject to the Cloudflare Online Services Terms of Use (https://www.cloudflare.com/website-terms/), and Cloudflare reserves the right to investigate your use of Tunnels for violations of such terms. If you intend to use Tunnels in production you should use a pre-created named tunnel by following: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps
-2025-09-10T02:31:54Z INF Requesting new quick Tunnel on trycloudflare.com...
-2025-09-10T02:31:57Z INF +--------------------------------------------------------------------------------------------+
-2025-09-10T02:31:57Z INF |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |
-2025-09-10T02:31:57Z INF |  https://ak-ra-archived-reflected.trycloudflare.com                                        |
-2025-09-10T02:31:57Z INF +--------------------------------------------------------------------------------------------+
-2025-09-10T02:31:57Z INF Cannot determine default configuration path. No file [config.yml config.yaml] in [~/.cloudflared ~/.cloudflare-warp ~/cloudflare-warp /etc/cloudflared /usr/local/etc/cloudflared]
-2025-09-10T02:31:57Z INF Version 2025.8.1 (Checksum a66353004197ee4c1fcb68549203824882bba62378ad4d00d234bdb8251f1114)
-2025-09-10T02:31:57Z INF GOOS: linux, GOVersion: go1.24.4, GoArch: amd64
-2025-09-10T02:31:57Z INF Settings: map[ha-connections:1 loglevel:info no-autoupdate:true p:http2 protocol:http2 url:http://127.0.0.1:3000]
-2025-09-10T02:31:57Z INF Generated Connector ID: 44f5879a-bbe0-4b3b-b7fd-e4e97eecd55f
-2025-09-10T02:31:57Z INF Initial protocol http2
-2025-09-10T02:31:57Z INF ICMP proxy will use 172.30.0.2 as source for IPv4
-2025-09-10T02:31:57Z INF ICMP proxy will use fe80::802b:38ff:fe3d:bcd0 in zone eth0 as source for IPv6
-2025-09-10T02:31:57Z WRN The user running cloudflared process has a GID (group ID) that is not within ping_group_range. You might need to add that user to a group within that range, or instead update the range to encompass a group the user is already in by modifying /proc/sys/net/ipv4/ping_group_range. Otherwise cloudflared will not be able to ping this network error="Group ID 1000 is not between ping group 1 to 0"
-2025-09-10T02:31:57Z WRN ICMP proxy feature is disabled error="cannot create ICMPv4 proxy: Group ID 1000 is not between ping group 1 to 0 nor ICMPv6 proxy: socket: permission denied"
-2025-09-10T02:31:57Z ERR Cannot determine default origin certificate path. No file cert.pem in [~/.cloudflared ~/.cloudflare-warp ~/cloudflare-warp /etc/cloudflared /usr/local/etc/cloudflared]. You need to specify the origin certificate path by specifying the origincert option in the configuration file, or set TUNNEL_ORIGIN_CERT environment variable originCertPath=
-2025-09-10T02:31:57Z INF ICMP proxy will use 172.30.0.2 as source for IPv4
-2025-09-10T02:31:57Z INF ICMP proxy will use fe80::802b:38ff:fe3d:bcd0 in zone eth0 as source for IPv6
-2025-09-10T02:31:57Z INF Starting metrics server on 127.0.0.1:20241/metrics
-2025-09-10T02:31:58Z INF Registered tunnel connection connIndex=0 connection=7e5ddd4e-f5d9-4d38-b782-3b7bbd52bd71 event=0 ip=198.41.192.27 location=iad02 protocol=http2
-2025-09-10T03:18:41Z INF Lost connection with the edge connIndex=0
-2025-09-10T03:18:41Z WRN Serve tunnel error error="connection with edge closed" connIndex=0 event=0 ip=198.41.192.27
-2025-09-10T03:18:41Z INF Retrying connection in up to 1s connIndex=0 event=0 ip=198.41.192.27
-2025-09-10T03:18:41Z ERR failed to serve incoming request error="Error shutting down control stream: context canceled"
-2025-09-10T03:18:43Z ERR Connection terminated error="connection with edge closed" connIndex=0
-2025-09-10T03:18:50Z ERR failed to serve incoming request error="Unauthorized: Failed to get tunnel"
-2025-09-10T03:18:50Z ERR Register tunnel error from server side error="Unauthorized: Failed to get tunnel" connIndex=0 event=0 ip=198.41.192.27
-2025-09-10T03:18:50Z INF Retrying connection in up to 4s connIndex=0 event=0 ip=198.41.192.27
-2025-09-10T03:18:54Z ERR Connection terminated error="Unauthorized: Failed to get tunnel" connIndex=0
-2025-09-10T03:19:32Z ERR failed to serve incoming request error="Unauthorized: Failed to get tunnel"
-2025-09-10T03:19:32Z ERR Register tunnel error from server side error="Unauthorized: Failed to get tunnel" connIndex=0 event=0 ip=198.41.192.27
-2025-09-10T03:19:32Z INF Retrying connection in up to 8s connIndex=0 event=0 ip=198.41.192.27
-2025-09-10T03:19:37Z ERR Connection terminated error="Unauthorized: Failed to get tunnel" connIndex=0
-2025-09-10T03:20:01Z ERR failed to serve incoming request error="Unauthorized: Failed to get tunnel"
-2025-09-10T03:20:01Z ERR Register tunnel error from server side error="Unauthorized: Failed to get tunnel" connIndex=0 event=0 ip=198.41.192.27
-2025-09-10T03:20:01Z INF Retrying connection in up to 16s connIndex=0 event=0 ip=198.41.192.27
-2025-09-10T03:20:05Z ERR Connection terminated error="Unauthorized: Failed to get tunnel" connIndex=0
-2025-09-10T03:20:34Z ERR failed to serve incoming request error="Unauthorized: Failed to get tunnel"
-2025-09-10T03:20:34Z ERR Register tunnel error from server side error="Unauthorized: Failed to get tunnel" connIndex=0 event=0 ip=198.41.192.27
-2025-09-10T03:20:34Z INF Retrying connection in up to 32s connIndex=0 event=0 ip=198.41.192.27
-2025-09-10T03:20:44Z ERR Connection terminated error="Unauthorized: Failed to get tunnel" connIndex=0
-2025-09-10T03:21:15Z ERR failed to serve incoming request error="Unauthorized: Failed to get tunnel"
-2025-09-10T03:21:15Z ERR Register tunnel error from server side error="Unauthorized: Failed to get tunnel" connIndex=0 event=0 ip=198.41.192.27
-2025-09-10T03:21:15Z INF Retrying connection in up to 1m4s connIndex=0 event=0 ip=198.41.192.27
+2025-09-10T03:21:41Z INF Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to experiment and try it out. However, be aware that these account-less Tunnels have no uptime guarantee, are subject to the Cloudflare Online Services Terms of Use (https://www.cloudflare.com/website-terms/), and Cloudflare reserves the right to investigate your use of Tunnels for violations of such terms. If you intend to use Tunnels in production you should use a pre-created named tunnel by following: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps
+2025-09-10T03:21:41Z INF Requesting new quick Tunnel on trycloudflare.com...
+2025-09-10T03:21:46Z INF +--------------------------------------------------------------------------------------------+
+2025-09-10T03:21:46Z INF |  Your quick Tunnel has been created! Visit it at (it may take some time to be reachable):  |
+2025-09-10T03:21:46Z INF |  https://continually-mongolia-academic-molecular.trycloudflare.com                         |
+2025-09-10T03:21:46Z INF +--------------------------------------------------------------------------------------------+
+2025-09-10T03:21:46Z INF Cannot determine default configuration path. No file [config.yml config.yaml] in [~/.cloudflared ~/.cloudflare-warp ~/cloudflare-warp /etc/cloudflared /usr/local/etc/cloudflared]
+2025-09-10T03:21:46Z INF Version 2025.8.1 (Checksum a66353004197ee4c1fcb68549203824882bba62378ad4d00d234bdb8251f1114)
+2025-09-10T03:21:46Z INF GOOS: linux, GOVersion: go1.24.4, GoArch: amd64
+2025-09-10T03:21:46Z INF Settings: map[ha-connections:1 loglevel:info no-autoupdate:true p:http2 protocol:http2 url:http://127.0.0.1:3000]
+2025-09-10T03:21:46Z INF Generated Connector ID: a7198e0e-9b19-44a1-8426-194cdef82f77
+2025-09-10T03:21:46Z INF Initial protocol http2
+2025-09-10T03:21:46Z INF ICMP proxy will use 172.30.0.2 as source for IPv4
+2025-09-10T03:21:46Z INF ICMP proxy will use fe80::802b:38ff:fe3d:bcd0 in zone eth0 as source for IPv6
+2025-09-10T03:21:46Z WRN The user running cloudflared process has a GID (group ID) that is not within ping_group_range. You might need to add that user to a group within that range, or instead update the range to encompass a group the user is already in by modifying /proc/sys/net/ipv4/ping_group_range. Otherwise cloudflared will not be able to ping this network error="Group ID 1000 is not between ping group 1 to 0"
+2025-09-10T03:21:46Z WRN ICMP proxy feature is disabled error="cannot create ICMPv4 proxy: Group ID 1000 is not between ping group 1 to 0 nor ICMPv6 proxy: socket: permission denied"
+2025-09-10T03:21:46Z ERR Cannot determine default origin certificate path. No file cert.pem in [~/.cloudflared ~/.cloudflare-warp ~/cloudflare-warp /etc/cloudflared /usr/local/etc/cloudflared]. You need to specify the origin certificate path by specifying the origincert option in the configuration file, or set TUNNEL_ORIGIN_CERT environment variable originCertPath=
+2025-09-10T03:21:46Z INF ICMP proxy will use 172.30.0.2 as source for IPv4
+2025-09-10T03:21:46Z INF ICMP proxy will use fe80::802b:38ff:fe3d:bcd0 in zone eth0 as source for IPv6
+2025-09-10T03:21:46Z INF Starting metrics server on 127.0.0.1:20241/metrics
+2025-09-10T03:21:46Z INF Registered tunnel connection connIndex=0 connection=2f7521bd-6c2e-4ea4-9e6a-82222438b1d6 event=0 ip=198.41.200.63 location=iad14 protocol=http2
