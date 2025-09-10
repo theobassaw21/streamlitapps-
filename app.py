@@ -421,9 +421,7 @@ def extract_crop_region_from_text(text: str, default_crop: str, default_region: 
 		chosen_region = next((r for r in region_names if r in lc), clean_name(default_region))
 	return chosen_crop.capitalize(), chosen_region.title()
 
-# Seed a friendly greeting once
-if not st.session_state.chat:
-	add_chat("assistant", "Hello! I'm your AI farming advisor. Select a crop and region above to get started.")
+# No default chat message; advice appears only after user action
 
 # Chat panel
 st.markdown('<div class="card chat-panel">', unsafe_allow_html=True)
