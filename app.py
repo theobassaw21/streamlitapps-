@@ -132,18 +132,35 @@ def forecast_next_weeks(past_prices: pd.Series, weeks_ahead: int = 3) -> np.ndar
 
 
 def build_chart(past_df: pd.DataFrame, forecast_df: pd.DataFrame) -> alt.Chart:
-	past = past_df.copy()
-	forecast = forecast_df.copy()
-	base = alt.Chart().encode(
-		x=alt.X("Date:T", title="Date"),
-		y=alt.Y("Price:Q", title="Price"),
-		tooltip=[alt.Tooltip("Date:T", title="Date"), alt.Tooltip("Price:Q", title="Price")],
+	tooltip = [alt.Tooltip("Date:T", title="Date"), alt.Tooltip("Price:Q", title="Price")]
+	past_line = (
+		alt.Chart(past_df)
+		.mark_line(color="#2e7d32", strokeWidth=3)
+		.encode(
+			x=alt.X("Date:T", title="Date"),
+			y=alt.Y("Price:Q", title="Price"),
+			tooltip=tooltip,
+		)
 	)
-	past_line = base.mark_line(color="#2e7d32", strokeWidth=3).encode(detail=alt.value("Past")).transform_calculate(Date="datum.Date", Price="datum.Price").transform_filter(alt.datum.Status == "Past").properties()
-	forecast_line = base.mark_line(color="#8d6e63", strokeDash=[6, 4], strokeWidth=3).encode(detail=alt.value("Forecast")).transform_calculate(Date="datum.Date", Price="datum.Price").transform_filter(alt.datum.Status == "Forecast")
-	forecast_points = base.mark_point(color="#8d6e63", filled=True, size=60).transform_filter(alt.datum.Status == "Forecast")
-	combined = alt.layer(past_line, forecast_line, forecast_points, data=pd.concat([past, forecast], ignore_index=True)).resolve_scale(color="independent").properties(height=360)
-	return combined
+	forecast_line = (
+		alt.Chart(forecast_df)
+		.mark_line(color="#8d6e63", strokeDash=[6, 4], strokeWidth=3)
+		.encode(
+			x=alt.X("Date:T", title="Date"),
+			y=alt.Y("Price:Q", title="Price"),
+			tooltip=tooltip,
+		)
+	)
+	forecast_points = (
+		alt.Chart(forecast_df)
+		.mark_point(color="#8d6e63", filled=True, size=60)
+		.encode(
+			x=alt.X("Date:T", title="Date"),
+			y=alt.Y("Price:Q", title="Price"),
+			tooltip=tooltip,
+		)
+	)
+	return alt.layer(past_line, forecast_line, forecast_points).properties(height=360)
 
 
 # ---------- Outputs ----------
