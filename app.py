@@ -5,6 +5,7 @@ import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
+from sklearn.ensemble import RandomForestRegressor
 
 
 st.set_page_config(
@@ -86,6 +87,7 @@ with st.sidebar:
 	crop = st.selectbox("🌾 Crop", options=crops, index=0)
 	region = st.selectbox("📍 Region/Market", options=regions, index=0)
 	weeks_ahead = st.slider("🔮 Forecast horizon (weeks)", min_value=2, max_value=4, value=3, step=1)
+	method = st.radio("🧠 Forecast method", ["AI (Random Forest)", "Simple (Trend)"], index=0)
 	get_forecast = st.button("Get Forecast 📈", use_container_width=True)
 
 
@@ -130,6 +132,79 @@ def forecast_next_weeks(past_prices: pd.Series, weeks_ahead: int = 3) -> np.ndar
 	return pred
 
 
+def _create_lag_features(series: np.ndarray, num_lags: int = 6) -> tuple[np.ndarray, np.ndarray, int]:
+	X: list[list[float]] = []
+	y: list[float] = []
+	for i in range(num_lags, len(series)):
+		lags = [float(series[i - j - 1]) for j in range(num_lags)]
+		idx = i
+		season_sin = np.sin(2 * np.pi * idx / 12.0)
+		season_cos = np.cos(2 * np.pi * idx / 12.0)
+		X.append(lags + [idx, season_sin, season_cos])
+		y.append(float(series[i]))
+	return np.array(X), np.array(y), len(series)
+
+
+def forecast_with_ml(past_prices: pd.Series, weeks_ahead: int = 3) -> tuple[np.ndarray, dict]:
+	series = past_prices.to_numpy().astype(float)
+	if len(series) < 10:
+		# Fallback to simple forecast when too little data
+		return forecast_next_weeks(past_prices, weeks_ahead), {"model": "Trend", "mae": None, "r2": None}
+
+	lag_count = min(8, max(4, len(series) // 3))
+	X, y, next_index = _create_lag_features(series, num_lags=lag_count)
+	if len(X) < 6:
+		return forecast_next_weeks(past_prices, weeks_ahead), {"model": "Trend", "mae": None, "r2": None}
+
+	model = RandomForestRegressor(
+		n_estimators=200,
+		random_state=42,
+		max_depth=6,
+		min_samples_leaf=1,
+	)
+	model.fit(X, y)
+
+	# Simple rolling one-step backtest over last 4 points (if available)
+	backtest_window = min(4, len(series) - lag_count)
+	mae_vals: list[float] = []
+	if backtest_window > 0:
+		for t in range(len(series) - backtest_window, len(series)):
+			train_series = series[:t]
+			X_tr, y_tr, _ = _create_lag_features(train_series, num_lags=lag_count)
+			if len(X_tr) < 3:
+				continue
+			m_bt = RandomForestRegressor(n_estimators=150, random_state=42, max_depth=6)
+			m_bt.fit(X_tr, y_tr)
+			# Build features for time t using previous lags
+			lags = [float(series[t - j - 1]) for j in range(lag_count)]
+			idx = t
+			feat = np.array([lags + [idx, np.sin(2 * np.pi * idx / 12.0), np.cos(2 * np.pi * idx / 12.0)]])
+			pred_t = float(m_bt.predict(feat)[0])
+			mae_vals.append(abs(pred_t - float(series[t])))
+	mae = float(np.mean(mae_vals)) if mae_vals else None
+
+	# Recursive multi-step forecast
+	forecast: list[float] = []
+	window = list(series[-lag_count:])
+	for step in range(weeks_ahead):
+		idx = next_index + step
+		lags = [float(window[-j - 1]) for j in range(lag_count)]
+		feat = np.array([[
+			*lags,
+			idx,
+			np.sin(2 * np.pi * idx / 12.0),
+			np.cos(2 * np.pi * idx / 12.0),
+		]])
+		pred_val = float(model.predict(feat)[0])
+		pred_val = max(0.0, pred_val)
+		forecast.append(pred_val)
+		window.append(pred_val)
+		if len(window) > lag_count:
+			window.pop(0)
+
+	return np.array(forecast), {"model": "RandomForest", "mae": mae, "r2": None}
+
+
 def build_chart(past_df: pd.DataFrame, forecast_df: pd.DataFrame) -> alt.Chart:
 	tooltip = [alt.Tooltip("Date:T", title="Date"), alt.Tooltip("Price:Q", title="Price")]
 	past_line = (
@@ -166,7 +241,11 @@ def build_chart(past_df: pd.DataFrame, forecast_df: pd.DataFrame) -> alt.Chart:
 if get_forecast:
 	past_df = generate_historical_prices(crop, region, weeks=16)
 	last_date = past_df["Date"].max()
-	pred_values = forecast_next_weeks(past_df["Price"], weeks_ahead=weeks_ahead)
+	if method.startswith("AI"):
+		pred_values, model_info = forecast_with_ml(past_df["Price"], weeks_ahead=weeks_ahead)
+	else:
+		pred_values = forecast_next_weeks(past_df["Price"], weeks_ahead=weeks_ahead)
+		model_info = {"model": "Trend", "mae": None, "r2": None}
 	forecast_dates = [last_date + timedelta(weeks=i + 1) for i in range(weeks_ahead)]
 	forecast_df = pd.DataFrame({"Date": forecast_dates, "Price": pred_values, "Status": "Forecast"})
 
@@ -246,8 +325,10 @@ if get_forecast:
 	st.markdown(
 		(
 			f'<div class="advisory-text">'
+			f'<strong>Engine:</strong> {"AI (" + model_info["model"] + ")" if method.startswith("AI") else "Simple (Trend)"}<br>'
 			f'<strong>Trend:</strong> {direction} ({strength})<br>'
 			f'<strong>Confidence:</strong> {confidence:.0f}%<br>'
+			+ (f'<strong>Backtest MAE:</strong> {model_info["mae"]:.2f}<br>' if model_info.get("mae") is not None else '')
 			f'<strong>Best week to sell:</strong> {best_date.strftime("%b %d, %Y")} '
 			f'(around {best_price:.2f} ± {band:.2f})<br>'
 			f'<strong>Advice:</strong> ' + (
