@@ -6,3 +6,24 @@ Collecting usage statistics. To deactivate, set browser.gatherUsageStats to fals
 
   URL: http://0.0.0.0:3000
 
+2025-09-10 02:09:18.484 Uncaught app execution
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 128, in exec_func_with_error_handling
+    result = func()
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 669, in code_to_exec
+    exec(code, module.__dict__)  # noqa: S102
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/app.py", line 10, in <module>
+    st.set_page_config(
+    ~~~~~~~~~~~~~~~~~~^
+    	title="Smart Agri-Advisor",
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    	page_icon="🌱",
+     ^^^^^^^^^^^^^^^
+    	layout="centered",
+     ^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/metrics_util.py", line 443, in wrapped_func
+    result = non_optional_func(*args, **kwargs)
+TypeError: set_page_config() got an unexpected keyword argument 'title'
