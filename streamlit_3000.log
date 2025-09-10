@@ -195,3 +195,32 @@ Traceback (most recent call last):
   File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/secrets.py", line 377, in _parse
     raise StreamlitSecretNotFoundError(error_msg)
 streamlit.errors.StreamlitSecretNotFoundError: No secrets found. Valid paths for a secrets.toml file or secret directories are: /home/ubuntu/.streamlit/secrets.toml, /workspace/.streamlit/secrets.toml
+2025-09-10 04:26:42.891 Uncaught app execution
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 128, in exec_func_with_error_handling
+    result = func()
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 669, in code_to_exec
+    exec(code, module.__dict__)  # noqa: S102
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/app.py", line 608, in <module>
+    ai_text = ai_reply(context, f"Give advice for {_crop} in {_region} for the next 10 days.")
+  File "/workspace/app.py", line 390, in ai_reply
+    client = get_openai_client()
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/caching/cache_utils.py", line 227, in __call__
+    return self._get_or_create_cached_value(args, kwargs, spinner_message)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/caching/cache_utils.py", line 269, in _get_or_create_cached_value
+    return self._handle_cache_miss(cache, value_key, func_args, func_kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/caching/cache_utils.py", line 328, in _handle_cache_miss
+    computed_value = self._info.func(*func_args, **func_kwargs)
+  File "/workspace/app.py", line 381, in get_openai_client
+    api_key = st.secrets.get("OPENAI_API_KEY") if hasattr(st, "secrets") else None
+              ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "<frozen _collections_abc>", line 811, in get
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/secrets.py", line 476, in __getitem__
+    value = self._parse()[key]
+            ~~~~~~~~~~~^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/streamlit/runtime/secrets.py", line 377, in _parse
+    raise StreamlitSecretNotFoundError(error_msg)
+streamlit.errors.StreamlitSecretNotFoundError: No secrets found. Valid paths for a secrets.toml file or secret directories are: /home/ubuntu/.streamlit/secrets.toml, /workspace/.streamlit/secrets.toml
